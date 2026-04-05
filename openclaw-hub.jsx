@@ -312,6 +312,7 @@ export default function App() {
     { id:"leaderboard", label:"LEADERBOARD" },
     { id:"playground", label:"PLAYGROUND" },
     { id:"compare", label:`COMPARE${compareList.length>0?` (${compareList.length})`:""}` },
+    { id:"hardware", label:"⚙ HW CHECK" },
     { id:"dashboard", label:"DASHBOARD" },
   ];
 
@@ -371,7 +372,24 @@ export default function App() {
         {page === "leaderboard" && <LeaderboardPage models={MODELS} apiKeys={apiKeys} setTestModal={setTestModal} />}
         {page === "playground" && <PlaygroundPage models={MODELS} apiKeys={apiKeys} logUsage={logUsage} />}
         {page === "compare" && <ComparePage compareList={compareList} models={MODELS} apiKeys={apiKeys} setCompareList={setCompareList} toggleCompare={toggleCompare} />}
+        {page === "hardware" && <HardwarePage models={MODELS} />}
         {page === "dashboard" && <DashboardPage apiKeys={apiKeys} setApiKeys={setApiKeys} usageLogs={usageLogs} savedModels={savedModels} models={MODELS} setPage={setPage} />}
+      </div>
+
+      {/* FOOTER BRANDING */}
+      <div style={{position:"relative",zIndex:1,borderTop:"1px solid #1e1508",
+        padding:"20px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",
+        marginTop:40}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <ClawMark size={20} />
+          <span style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>Open<span style={{color:"#f97316"}}>Claw</span></span>
+          <span style={{color:"#2a1f0e",fontSize:12}}>|</span>
+          <span style={{fontSize:11,color:"#6b5c42"}}>by <strong style={{color:"#f97316",letterSpacing:"0.05em"}}>projectAdnan</strong></span>
+        </div>
+        <div style={{fontSize:11,color:"#6b5c42"}}>
+          127+ models · Keys stored locally · No tracking
+        </div>
+        <div style={{fontSize:11,color:"#3a2a1a"}}>v1.0.0 · 2026</div>
       </div>
 
       {/* Test Modal */}
@@ -1319,6 +1337,389 @@ function TestModal({ model:m, apiKeys, logUsage, onClose, onAddKey }) {
           }} className="hov-btn">Copy Snippet</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ══ HARDWARE BENCHMARK PAGE ═══════════════════════════════════
+function HardwarePage({ models }) {
+  const [step, setStep] = useState(1); // 1=pick model, 2=paste config, 3=results
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [raw, setRaw] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [result, setResult] = useState(null);
+
+  const openModels = models.filter(m => m.type === "open");
+
+  const parseSpec = (text) => {
+    const get = (keys) => {
+      for (const k of keys) {
+        const re = new RegExp(k + "[\\s\\t]+(.+)", "i");
+        const match = text.match(re);
+        if (match) return match[1].trim();
+      }
+      return null;
+    };
+    const procRaw = get(["Processor"]) || "";
+    const ramRaw  = get(["Installed RAM","RAM"]) || "";
+    const gpuRaw  = get(["Graphics Card","GPU","Display adapter","Display"]) || "";
+    const storageRaw = get(["Storage","Hard disk","Disk"]) || "";
+    const sysType = get(["System Type"]) || "";
+
+    const ramMatch = ramRaw.match(/([\d.]+)\s*GB/i);
+    const ramGB = ramMatch ? parseFloat(ramMatch[1]) : 0;
+
+    const vramMatches = [...gpuRaw.matchAll(/\((\d+)\s*GB\)/gi)];
+    const vramGB = vramMatches.length > 0 ? Math.max(...vramMatches.map(m => parseInt(m[1]))) : 0;
+
+    const cpuScore = (() => {
+      const t = procRaw.toLowerCase();
+      if (t.includes("i9") || t.includes("ryzen 9") || t.includes("xeon") || t.includes("threadripper")) return 95;
+      if (t.includes("i7") || t.includes("ryzen 7")) return 80;
+      if (t.includes("i5") || t.includes("ryzen 5")) return 65;
+      if (t.includes("i3") || t.includes("ryzen 3")) return 45;
+      if (t.includes("celeron") || t.includes("pentium") || t.includes("atom")) return 20;
+      return 50;
+    })();
+
+    const gpuTier = (() => {
+      const t = gpuRaw.toLowerCase();
+      if (t.includes("4090")||t.includes("4080")||t.includes("3090")||t.includes("a100")||t.includes("h100")) return "flagship";
+      if (t.includes("4070")||t.includes("3080")||t.includes("3070")||t.includes("4060ti")) return "high";
+      if (t.includes("3060")||t.includes("2080")||t.includes("2070")||t.includes("6800")||t.includes("6700")) return "mid";
+      if (t.includes("1080")||t.includes("2060")||t.includes("3050")||t.includes("6600")||t.includes("rx 580")) return "low-mid";
+      if (t.includes("gt ")||t.includes("710")||t.includes("730")||t.includes("intel")||t.includes("integrated")||t.includes("uhd")||t.includes("iris")) return "integrated";
+      return "unknown";
+    })();
+
+    const isHDD = storageRaw.toLowerCase().includes("hdd") || storageRaw.toLowerCase().includes("hitachi") || storageRaw.toLowerCase().includes("toshiba mq");
+    const isSSD = storageRaw.toLowerCase().includes("ssd") || storageRaw.toLowerCase().includes("nvme") || storageRaw.toLowerCase().includes("samsung") && !isHDD;
+
+    return { processor:procRaw||"Unknown", ram:ramGB, ramRaw, vram:vramGB, gpuRaw:gpuRaw||"Unknown",
+      storage:storageRaw||"Unknown", isHDD, isSSD, cpuScore, gpuTier, is64bit:sysType.includes("64") };
+  };
+
+  const getParamsB = (m) => {
+    const t = (m.params||"").toLowerCase();
+    if (t.includes("671")) return 671;
+    if (t.includes("405")) return 405;
+    if (t.includes("72"))  return 72;
+    if (t.includes("70"))  return 70;
+    if (t.includes("34"))  return 34;
+    if (t.includes("27"))  return 27;
+    if (t.includes("14"))  return 14;
+    if (t.includes("8"))   return 8;
+    if (t.includes("7"))   return 7;
+    if (t.includes("3"))   return 3;
+    return 120;
+  };
+
+  const analyze = () => {
+    if (!raw.trim()) { toastFn?.("Paste your system info first", "error"); return; }
+    if (!selectedModel) { toastFn?.("Select a model first", "error"); return; }
+    const hw = parseSpec(raw);
+    const m = selectedModel;
+    const paramsB = getParamsB(m);
+
+    // Requirements
+    const vramQ4  = Math.ceil(paramsB * 0.55); // INT4 GPU
+    const ramCPU  = Math.ceil(paramsB * 0.65); // CPU RAM needed
+    const ramQ4   = Math.ceil(paramsB * 0.55); // Q4 CPU
+    const ramQ3   = Math.ceil(paramsB * 0.40); // Q3 CPU (more compressed)
+
+    // Determine verdict
+    let verdict, verdictColor, verdictIcon, summary;
+    let steps = [];
+    let warnings = [];
+    let alternatives = [];
+
+    if (m.type === "closed") {
+      verdict = "Cloud API Only";
+      verdictColor = "#8b5cf6";
+      verdictIcon = "☁";
+      summary = `${m.name} is a closed-source model hosted by ${m.org}. Your hardware is irrelevant — it runs on their servers.`;
+      steps = [
+        { n:1, text:`Go to ${m.docsUrl} and create an account`, done:false },
+        { n:2, text:`Generate an API key from their dashboard`, done:false },
+        { n:3, text:`Add it in OpenClaw → Dashboard → API Keys`, done:false },
+        { n:4, text:`Use it in the Playground tab instantly`, done:false },
+      ];
+    } else if (hw.vram >= vramQ4 && hw.gpuTier !== "integrated" && hw.gpuTier !== "unknown") {
+      verdict = "✓ Runs Natively on GPU";
+      verdictColor = "#22c55e";
+      verdictIcon = "⚡";
+      summary = `Your ${hw.vram}GB VRAM is enough to run ${m.name} with INT4 quantization at full GPU speed.`;
+      steps = [
+        { n:1, text:"Install Ollama: https://ollama.com/download" },
+        { n:2, text:`Run in terminal: ollama pull ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}` },
+        { n:3, text:`Start chatting: ollama run ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}` },
+        { n:4, text:"Optional: install Open WebUI for a browser interface" },
+      ];
+      if (hw.isHDD) warnings.push("⚠ You have an HDD — model loading will be slow (1–3 min). An SSD would reduce this to seconds.");
+    } else if (hw.ram >= ramCPU && hw.cpuScore >= 65) {
+      verdict = "Runs on CPU (Slow)";
+      verdictColor = "#eab308";
+      verdictIcon = "🐢";
+      summary = `Your ${hw.ram}GB RAM can hold the quantized model, but without a capable GPU it'll run on CPU at ~1–3 tokens/sec.`;
+      steps = [
+        { n:1, text:"Install Ollama: https://ollama.com/download" },
+        { n:2, text:`Run: ollama run ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}:q4_0  (forces CPU mode)` },
+        { n:3, text:"Expect 1–3 tokens/sec — usable but slow for long outputs" },
+        { n:4, text:"Keep other apps closed to free up RAM during inference" },
+      ];
+      if (hw.isHDD) warnings.push("⚠ HDD detected — first load will take 3–5 minutes. Strongly recommend SSD.");
+      if (hw.cpuScore < 65) warnings.push("⚠ Your CPU is older/weaker — speeds may be below 1 tok/sec.");
+      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.6) && alt.id !== m.id).slice(0,3);
+    } else if (hw.ram >= ramQ3) {
+      verdict = "Needs Heavy Quantization (Q3)";
+      verdictColor = "#f97316";
+      verdictIcon = "⚙";
+      summary = `Your ${hw.ram}GB RAM is tight for ${m.name}. You need the most compressed Q3 version, and even then it may be unstable.`;
+      steps = [
+        { n:1, text:"Install llama.cpp: https://github.com/ggerganov/llama.cpp" },
+        { n:2, text:`Download the Q3_K_S GGUF version of ${m.name} from HuggingFace` },
+        { n:3, text:`Run: ./llama-cli -m ${m.name.toLowerCase().replace(/\s/g,"-")}.Q3_K_S.gguf -n 256` },
+        { n:4, text:"Close ALL other apps before running — every MB counts" },
+      ];
+      warnings.push(`⚠ RAM is very tight. Even Q3 needs ~${ramQ3}GB and you have ${hw.ram}GB. System may crash or swap heavily.`);
+      if (hw.isHDD) warnings.push("⚠ HDD + low RAM = very long load times and possible failures.");
+      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.5) && alt.id !== m.id).slice(0,3);
+    } else {
+      verdict = "Not Feasible Locally";
+      verdictColor = "#ef4444";
+      verdictIcon = "✕";
+      summary = `${m.name} needs at least ${ramQ3}GB RAM or ${vramQ4}GB VRAM. Your system (${hw.ram}GB RAM, ${hw.vram}GB VRAM) can't run it locally.`;
+      steps = [
+        { n:1, text:`Use the API version via OpenClaw Playground instead`, highlight:true },
+        { n:2, text:`Get a free API key at ${m.docsUrl}` },
+        { n:3, text:"Add key in Dashboard → run in Playground with no hardware limits" },
+      ];
+      warnings.push(`✕ Minimum RAM for any quantized version: ~${ramQ3}GB. You have ${hw.ram}GB.`);
+      warnings.push(`✕ Minimum VRAM for GPU inference: ~${vramQ4}GB. You have ${hw.vram}GB.`);
+      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.6) && alt.id !== m.id).slice(0,3);
+    }
+
+    setParsed(hw);
+    setResult({ verdict, verdictColor, verdictIcon, summary, steps, warnings, alternatives, paramsB, vramQ4, ramCPU, ramQ3 });
+    setStep(3);
+    toastFn?.("Analysis complete!");
+  };
+
+  const reset = () => { setStep(1); setSelectedModel(null); setRaw(""); setParsed(null); setResult(null); };
+
+  return (
+    <div style={S.main} className="page-enter">
+      {/* Header */}
+      <div style={{marginBottom:28}}>
+        <div style={S.sectionTitle}>⚙ Can I Run This Model?</div>
+        <div style={S.muted}>Select a model you want to run locally, paste your Windows system info, get a step-by-step action plan.</div>
+      </div>
+
+      {/* Step indicator */}
+      <div style={{...S.flex(0,"center","flex-start"), marginBottom:32, gap:0}}>
+        {[{n:1,l:"Pick Model"},{n:2,l:"Your Specs"},{n:3,l:"Action Plan"}].map((s,i) => (
+          <div key={s.n} style={{display:"flex",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,cursor: s.n < step ? "pointer":"default"}}
+              onClick={() => s.n < step && setStep(s.n)}>
+              <div style={{width:28,height:28,borderRadius:"50%",border:`2px solid ${step>=s.n?"#f97316":"#2a1f0e"}`,
+                background: step===s.n?"#f97316":step>s.n?"rgba(249,115,22,0.2)":"transparent",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:12,fontWeight:700,color:step>=s.n?"#f97316":"#6b5c42",
+                transition:"all 0.2s"}}>
+                {step>s.n ? "✓" : s.n}
+              </div>
+              <span style={{fontSize:12,color:step>=s.n?"#e8dcc8":"#6b5c42",letterSpacing:"0.04em"}}>{s.l}</span>
+            </div>
+            {i<2 && <div style={{width:40,height:1,background:step>s.n?"#f97316":"#2a1f0e",margin:"0 8px",transition:"background 0.3s"}} />}
+          </div>
+        ))}
+      </div>
+
+      {/* STEP 1 — Pick Model */}
+      {step === 1 && (
+        <div className="page-enter">
+          <div style={{fontSize:12,color:"#6b5c42",marginBottom:16,letterSpacing:"0.05em"}}>
+            SELECT THE MODEL YOU WANT TO RUN LOCALLY
+          </div>
+          <div style={{background:"rgba(139,92,246,0.06)",border:"1px solid rgba(139,92,246,0.2)",
+            borderRadius:8,padding:"10px 14px",fontSize:12,color:"#8a7a62",marginBottom:20}}>
+            ☁ Closed models (GPT-4o, Gemini, Claude) are grayed out — they can't run locally by design.
+          </div>
+          <div style={S.grid2}>
+            {models.map(m => {
+              const isOpen = m.type === "open";
+              const sel = selectedModel?.id === m.id;
+              return (
+                <div key={m.id} style={{
+                  background: sel?"rgba(249,115,22,0.1)":"#120e08",
+                  border:`2px solid ${sel?"#f97316":isOpen?"#2a1f0e":"#1a1208"}`,
+                  borderRadius:10, padding:"14px 16px",
+                  cursor: isOpen?"pointer":"not-allowed",
+                  opacity: isOpen?1:0.4, transition:"all 0.15s"
+                }} onClick={() => isOpen && setSelectedModel(m)}>
+                  <div style={S.flex(10)}>
+                    <span style={{fontSize:20,color: isOpen?"#f97316":"#6b5c42"}}>{m.icon}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{m.name}</div>
+                      <div style={{fontSize:11,color:"#6b5c42"}}>{m.org} · {m.params}</div>
+                    </div>
+                    {sel && <span style={{color:"#f97316",fontSize:18}}>✓</span>}
+                    {!isOpen && <span style={{fontSize:10,color:"#6b5c42"}}>API only</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button style={{...S.btn("primary"),marginTop:24,fontSize:13,padding:"12px 28px",
+            opacity:selectedModel?1:0.4}}
+            onClick={() => selectedModel && setStep(2)} className="hov-btn">
+            Next: Paste Your Specs →
+          </button>
+        </div>
+      )}
+
+      {/* STEP 2 — Paste Config */}
+      {step === 2 && (
+        <div className="page-enter">
+          <div style={{...S.flex(10,"center","space-between"),marginBottom:16}}>
+            <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:16,color:"#f4e4c4"}}>
+              Checking: <span style={{color:"#f97316"}}>{selectedModel.name}</span>
+            </div>
+            <button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>setStep(1)} className="hov-btn">← Change Model</button>
+          </div>
+
+          <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.2)",
+            borderRadius:10,padding:"14px 18px",marginBottom:20,fontSize:12,color:"#8a7a62",lineHeight:1.9}}>
+            <strong style={{color:"#f97316"}}>How to get your Windows system info:</strong><br/>
+            1. Press <kbd style={{background:"#1a1208",border:"1px solid #2a1f0e",borderRadius:3,padding:"1px 7px",color:"#e8dcc8",fontSize:11}}>Win + I</kbd> to open Settings<br/>
+            2. Go to <strong style={{color:"#e8dcc8"}}>System → About</strong><br/>
+            3. Select all the text in the "Device specifications" section<br/>
+            4. Copy it and paste below ↓
+          </div>
+
+          <textarea
+            value={raw}
+            onChange={e => setRaw(e.target.value)}
+            placeholder={"Paste your Windows system info here...\n\nExample format:\nDevice Name\tDESKTOP-XXXXX\nProcessor\tIntel(R) Core(TM) i5-12400\nInstalled RAM\t16.00 GB\nGraphics Card\tNVIDIA GeForce RTX 3060 (12 GB)\nSystem Type\t64-bit operating system..."}
+            style={{...S.input, height:200, resize:"vertical", fontSize:12, lineHeight:1.8,
+              fontFamily:"'Courier New',monospace", marginBottom:16}}
+          />
+
+          <div style={S.flex(10)}>
+            <button style={{...S.btn("primary"),fontSize:13,padding:"12px 28px",
+              opacity:raw.trim()?1:0.4}}
+              onClick={analyze} className="hov-btn">
+              ⚡ Analyze & Get Action Plan
+            </button>
+            <button style={S.btn("ghost")} onClick={()=>setStep(1)} className="hov-btn">← Back</button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3 — Results */}
+      {step === 3 && result && parsed && (
+        <div className="page-enter">
+          {/* Verdict banner */}
+          <div style={{background:`rgba(${result.verdictColor==="#22c55e"?"34,197,94":result.verdictColor==="#eab308"?"234,179,8":result.verdictColor==="#f97316"?"249,115,22":result.verdictColor==="#8b5cf6"?"139,92,246":"239,68,68"},0.08)`,
+            border:`1px solid ${result.verdictColor}`,borderRadius:12,padding:"20px 24px",marginBottom:24}}>
+            <div style={{...S.flex(12,"flex-start","space-between"),flexWrap:"wrap",gap:12}}>
+              <div style={S.flex(14)}>
+                <div style={{width:52,height:52,borderRadius:12,
+                  background:`rgba(${result.verdictColor==="#22c55e"?"34,197,94":result.verdictColor==="#eab308"?"234,179,8":result.verdictColor==="#f97316"?"249,115,22":result.verdictColor==="#8b5cf6"?"139,92,246":"239,68,68"},0.15)`,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:24,flexShrink:0}}>
+                  {result.verdictIcon}
+                </div>
+                <div>
+                  <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:20,color:result.verdictColor}}>{result.verdict}</div>
+                  <div style={{fontSize:13,color:"#8a7a62",marginTop:4,lineHeight:1.6,maxWidth:540}}>{result.summary}</div>
+                </div>
+              </div>
+              <div style={{...S.flex(8), flexShrink:0}}>
+                <button style={S.btn("ghost")} onClick={()=>setStep(2)} className="hov-btn">← Edit Specs</button>
+                <button style={S.btn("ghost")} onClick={reset} className="hov-btn">↺ Start Over</button>
+              </div>
+            </div>
+          </div>
+
+          {/* System summary */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8,marginBottom:24}}>
+            {[
+              {l:"CPU", v:parsed.processor.split("@")[0].trim().slice(0,22), c:"#f97316"},
+              {l:"RAM", v:`${parsed.ram} GB`, c:parsed.ram>=16?"#22c55e":parsed.ram>=8?"#eab308":"#ef4444"},
+              {l:"VRAM", v:`${parsed.vram} GB`, c:parsed.vram>=8?"#22c55e":parsed.vram>=4?"#eab308":"#ef4444"},
+              {l:"Storage", v:parsed.isSSD?"SSD ✓":parsed.isHDD?"HDD ⚠":"?", c:parsed.isSSD?"#22c55e":"#eab308"},
+              {l:"Model Size", v:`~${result.paramsB}B params`, c:"#8b5cf6"},
+              {l:"Min VRAM (Q4)", v:`${result.vramQ4} GB needed`, c:parsed.vram>=result.vramQ4?"#22c55e":"#ef4444"},
+            ].map(s => (
+              <div key={s.l} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{fontSize:10,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:3}}>{s.l}</div>
+                <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:s.c}}>{s.v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Warnings */}
+          {result.warnings.length > 0 && (
+            <div style={{marginBottom:20, display:"flex", flexDirection:"column", gap:6}}>
+              {result.warnings.map((w,i) => (
+                <div key={i} style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.25)",
+                  borderRadius:8,padding:"10px 14px",fontSize:12,color:"#f87171",lineHeight:1.5}}>{w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Action steps */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:12,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:12}}>ACTION PLAN</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {result.steps.map((s,i) => (
+                <div key={i} style={{...S.flex(14,"flex-start"),
+                  background: s.highlight?"rgba(249,115,22,0.06)":"#120e08",
+                  border:`1px solid ${s.highlight?"rgba(249,115,22,0.3)":"#2a1f0e"}`,
+                  borderRadius:10, padding:"14px 16px"}}>
+                  <div style={{width:26,height:26,borderRadius:"50%",background:"rgba(249,115,22,0.12)",
+                    border:"1px solid rgba(249,115,22,0.3)",flexShrink:0,
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:11,fontWeight:700,color:"#f97316"}}>
+                    {s.n}
+                  </div>
+                  <div style={{fontSize:13,color:"#e8dcc8",lineHeight:1.6,fontFamily:"'Courier New',monospace"}}>
+                    {s.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Alternative models */}
+          {result.alternatives.length > 0 && (
+            <div>
+              <div style={{fontSize:12,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:12}}>
+                BETTER ALTERNATIVES FOR YOUR HARDWARE
+              </div>
+              <div style={S.grid3}>
+                {result.alternatives.map(alt => (
+                  <div key={alt.id} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:"14px 16px",
+                    cursor:"pointer",transition:"all 0.15s"}}
+                    className="hov-card"
+                    onClick={() => { setSelectedModel(alt); setResult(null); setParsed(null); setStep(2); }}>
+                    <div style={S.flex(8)}>
+                      <span style={{color:"#f97316",fontSize:18}}>{alt.icon}</span>
+                      <div>
+                        <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:"#f4e4c4"}}>{alt.name}</div>
+                        <div style={{fontSize:11,color:"#6b5c42"}}>{alt.params} · {alt.org}</div>
+                      </div>
+                    </div>
+                    <div style={{fontSize:11,color:"#22c55e",marginTop:8}}>✓ Fits your {parsed.ram}GB RAM</div>
+                    <div style={{fontSize:10,color:"#6b5c42",marginTop:4}}>Click to check this model instead →</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
