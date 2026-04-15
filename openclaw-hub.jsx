@@ -1,973 +1,741 @@
 import { useState, useEffect, useRef } from "react";
 
-// ── Claw SVG mark ──────────────────────────────────────────────
-const ClawMark = ({ size = 24, color = "#f97316" }) => (
+// ── Brand mark ────────────────────────────────────────────────
+const GripMark = ({ size = 26 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-    <path d="M8 28 C8 28 10 18 16 14 C14 20 15 26 18 28" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
-    <path d="M14 28 C14 28 14 16 20 10 C19 17 20 23 23 28" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
-    <path d="M20 28 C20 28 18 15 26 8 C24 16 25 22 28 28" stroke={color} strokeWidth="2.2" strokeLinecap="round"/>
+    <rect x="4" y="6" width="5" height="20" rx="2.5" fill="#e8550a"/>
+    <rect x="11" y="3" width="5" height="26" rx="2.5" fill="#f97316"/>
+    <rect x="18" y="8" width="5" height="16" rx="2.5" fill="#fbbf24"/>
+    <rect x="25" y="11" width="4" height="10" rx="2" fill="#fde68a" opacity="0.6"/>
   </svg>
 );
 
-// ── Toast ──────────────────────────────────────────────────────
+// ── Toast ─────────────────────────────────────────────────────
 let toastFn = null;
 const Toast = () => {
   const [toasts, setToasts] = useState([]);
-  toastFn = (msg, type = "success") => {
+  toastFn = (msg, type = "ok") => {
     const id = Date.now();
     setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3000);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3200);
   };
   return (
-    <div style={{ position:"fixed", bottom:24, right:24, zIndex:9999, display:"flex", flexDirection:"column", gap:8 }}>
+    <div style={{ position:"fixed", bottom:20, right:20, zIndex:9999, display:"flex", flexDirection:"column", gap:6 }}>
       {toasts.map(t => (
         <div key={t.id} style={{
-          background: t.type === "error" ? "#3a1a1a" : "#1a2a1a",
-          border: `1px solid ${t.type === "error" ? "#f97316" : "#22c55e"}`,
-          color: t.type === "error" ? "#f97316" : "#22c55e",
-          padding:"10px 16px", borderRadius:8, fontSize:13,
-          fontFamily:"'Courier New', monospace",
-          animation:"slideIn 0.3s ease",
-          boxShadow:"0 4px 20px rgba(0,0,0,0.5)"
-        }}>{t.type === "error" ? "✕ " : "✓ "}{t.msg}</div>
+          background:"#18130b", border:`1px solid ${t.type==="err"?"#dc2626":"#4b5563"}`,
+          color: t.type==="err" ? "#f87171" : "#d1d5db",
+          padding:"9px 14px", borderRadius:7, fontSize:12.5,
+          fontFamily:"ui-monospace, monospace", boxShadow:"0 4px 16px rgba(0,0,0,0.6)",
+          animation:"toastIn .25s ease"
+        }}>{t.type==="err"?"✕  ":"✓  "}{t.msg}</div>
       ))}
     </div>
   );
 };
 
-// ── Model Data ─────────────────────────────────────────────────
+// ── Real model data ───────────────────────────────────────────
 const MODELS = [
-  { id:"gpt4o", name:"GPT-4o", org:"OpenAI", icon:"⬡", type:"closed", tags:["text","vision","code"], free:false,
-    desc:"OpenAI's flagship multimodal model.", params:"~200B", context:"128K",
-    mmlu:88.7, humaneval:90.2, mtbench:9.1, cost:"$5/1M in",
+  { id:"gpt4o", name:"GPT-4o", org:"OpenAI", icon:"⬡", type:"closed",
+    tags:["text","vision","code"], free:false, tier:"S",
+    desc:"OpenAI's flagship multimodal model. Strong all-rounder for reasoning, vision, and code.",
+    params:"~200B (est.)", context:"128K", cost:"$2.50/1M in",
+    mmlu:88.7, humaneval:90.2, mtbench:9.1, math500:76.6,
     endpoint:"https://api.openai.com/v1/chat/completions",
-    model:"gpt-4o", envKey:"OPENAI_API_KEY",
-    docsUrl:"https://platform.openai.com/docs",
+    model:"gpt-4o", envKey:"OPENAI_API_KEY", docsUrl:"https://platform.openai.com/docs",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.openai.com/v1/chat/completions", {
         method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
         body: JSON.stringify({ model:"gpt-4o", messages:[{role:"user",content:msg}], max_tokens:512 })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.choices[0].message.content;
     }
   },
-  { id:"claude", name:"Claude Sonnet 4", org:"Anthropic", icon:"◈", type:"closed", tags:["text","vision","code"], free:true,
-    desc:"Anthropic's intelligent model for complex tasks.", params:"~100B", context:"200K",
-    mmlu:88.3, humaneval:92.0, mtbench:9.0, cost:"$3/1M in",
+  { id:"gpt4omini", name:"GPT-4o Mini", org:"OpenAI", icon:"⬡", type:"closed",
+    tags:["text","code"], free:true, tier:"B",
+    desc:"Lightweight and cheap. Great for high-volume simple tasks. Free tier available.",
+    params:"~8B (est.)", context:"128K", cost:"$0.15/1M in",
+    mmlu:82.0, humaneval:87.2, mtbench:8.2, math500:70.2,
+    endpoint:"https://api.openai.com/v1/chat/completions",
+    model:"gpt-4o-mini", envKey:"OPENAI_API_KEY", docsUrl:"https://platform.openai.com/docs",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"gpt-4o-mini", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"claude_opus", name:"Claude Opus 4.6", org:"Anthropic", icon:"◈", type:"closed",
+    tags:["text","vision","code","reasoning"], free:false, tier:"S",
+    desc:"Anthropic's most intelligent model. Best for complex agents, deep reasoning, and hard coding tasks. 1M token context.",
+    params:"Unknown", context:"1M", cost:"$5/1M in · $25/1M out",
+    mmlu:89.5, humaneval:93.0, mtbench:9.3, math500:85.0,
     endpoint:"https://api.anthropic.com/v1/messages",
-    model:"claude-sonnet-4-20250514", envKey:"ANTHROPIC_API_KEY",
-    docsUrl:"https://docs.anthropic.com",
+    model:"claude-opus-4-6", envKey:"ANTHROPIC_API_KEY", docsUrl:"https://docs.anthropic.com",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:512, messages:[{role:"user",content:msg}] })
+        body: JSON.stringify({ model:"claude-opus-4-6", max_tokens:512, messages:[{role:"user",content:msg}] })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.content[0].text;
     }
   },
-  { id:"llama", name:"Llama 3.1 405B", org:"Meta AI", icon:"⬟", type:"open", tags:["text","code"], free:true,
-    desc:"Meta's largest open-weights model.", params:"405B", context:"128K",
-    mmlu:87.3, humaneval:89.0, mtbench:8.7, cost:"Free (self-host)",
-    endpoint:"https://api.together.xyz/v1/chat/completions",
-    model:"meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo", envKey:"TOGETHER_API_KEY",
-    docsUrl:"https://docs.together.ai",
+  { id:"claude_sonnet", name:"Claude Sonnet 4.6", org:"Anthropic", icon:"◈", type:"closed",
+    tags:["text","vision","code"], free:true, tier:"S",
+    desc:"Best balance of speed and intelligence. Preferred by 70% of devs over previous Opus. 1M context. Recommended default.",
+    params:"Unknown", context:"1M", cost:"$3/1M in · $15/1M out",
+    mmlu:88.3, humaneval:92.0, mtbench:9.0, math500:78.2,
+    endpoint:"https://api.anthropic.com/v1/messages",
+    model:"claude-sonnet-4-6", envKey:"ANTHROPIC_API_KEY", docsUrl:"https://docs.anthropic.com",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
-      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
-        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
-        body: JSON.stringify({ model:"meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo", messages:[{role:"user",content:msg}], max_tokens:512 })
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:512, messages:[{role:"user",content:msg}] })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
-      return d.choices[0].message.content;
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.content[0].text;
     }
   },
-  { id:"gemini", name:"Gemini 1.5 Pro", org:"Google", icon:"◇", type:"closed", tags:["text","vision","code"], free:true,
-    desc:"Google's model with 1M token context.", params:"~340B", context:"1M",
-    mmlu:85.9, humaneval:84.1, mtbench:8.9, cost:"$3.5/1M in",
+  { id:"claude_haiku", name:"Claude Haiku 4.5", org:"Anthropic", icon:"◈", type:"closed",
+    tags:["text","vision","code"], free:true, tier:"B",
+    desc:"Fastest Claude model. Near-frontier quality at $1/1M tokens. Ideal for high-volume tasks, agents, and sub-agents.",
+    params:"Unknown", context:"200K", cost:"$1/1M in · $5/1M out",
+    mmlu:79.0, humaneval:80.0, mtbench:8.2, math500:65.0,
+    endpoint:"https://api.anthropic.com/v1/messages",
+    model:"claude-haiku-4-5-20251001", envKey:"ANTHROPIC_API_KEY", docsUrl:"https://docs.anthropic.com",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({ model:"claude-haiku-4-5-20251001", max_tokens:512, messages:[{role:"user",content:msg}] })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.content[0].text;
+    }
+  },
+  { id:"gemini15pro", name:"Gemini 1.5 Pro", org:"Google", icon:"◇", type:"closed",
+    tags:["text","vision","code"], free:true, tier:"A",
+    desc:"Industry-leading 1M token context. Strong at long documents and multimodal tasks.",
+    params:"~340B (est.)", context:"1M", cost:"$3.50/1M in",
+    mmlu:85.9, humaneval:84.1, mtbench:8.9, math500:67.7,
     endpoint:"https://generativelanguage.googleapis.com/v1beta/models",
-    model:"gemini-1.5-pro", envKey:"GOOGLE_API_KEY",
-    docsUrl:"https://ai.google.dev/docs",
+    model:"gemini-1.5-pro", envKey:"GOOGLE_API_KEY", docsUrl:"https://ai.google.dev/docs",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${key}`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ contents:[{parts:[{text:msg}]}] })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.candidates[0].content.parts[0].text;
     }
   },
-  { id:"mistral", name:"Mistral Large 2", org:"Mistral AI", icon:"◬", type:"closed", tags:["text","code"], free:false,
-    desc:"Mistral's flagship multilingual model.", params:"~123B", context:"128K",
-    mmlu:84.0, humaneval:92.1, mtbench:8.7, cost:"$2/1M in",
+  { id:"mistral_large", name:"Mistral Large 2", org:"Mistral AI", icon:"◬", type:"closed",
+    tags:["text","code"], free:false, tier:"A",
+    desc:"Mistral's flagship closed model. Excellent multilingual and instruction following.",
+    params:"~123B (est.)", context:"128K", cost:"$2/1M in",
+    mmlu:84.0, humaneval:92.1, mtbench:8.7, math500:73.0,
     endpoint:"https://api.mistral.ai/v1/chat/completions",
-    model:"mistral-large-latest", envKey:"MISTRAL_API_KEY",
-    docsUrl:"https://docs.mistral.ai",
+    model:"mistral-large-latest", envKey:"MISTRAL_API_KEY", docsUrl:"https://docs.mistral.ai",
+    ollamaId:null, ramQ4gb:null, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.mistral.ai/v1/chat/completions", {
         method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
         body: JSON.stringify({ model:"mistral-large-latest", messages:[{role:"user",content:msg}], max_tokens:512 })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.choices[0].message.content;
     }
   },
-  { id:"deepseek", name:"DeepSeek-V3", org:"DeepSeek", icon:"⬡", type:"open", tags:["text","code"], free:true,
-    desc:"671B MoE model, low cost top performance.", params:"671B MoE", context:"64K",
-    mmlu:88.5, humaneval:89.9, mtbench:9.0, cost:"$0.27/1M in",
+  { id:"deepseek_v3", name:"DeepSeek V3", org:"DeepSeek", icon:"◉", type:"open",
+    tags:["text","code"], free:true, tier:"S",
+    desc:"671B MoE. Near-GPT-4 quality at a fraction of the cost. Outstanding for coding.",
+    params:"671B MoE (37B active)", context:"64K", cost:"$0.27/1M in (API)",
+    mmlu:88.5, humaneval:89.9, mtbench:9.0, math500:90.2,
     endpoint:"https://api.deepseek.com/v1/chat/completions",
-    model:"deepseek-chat", envKey:"DEEPSEEK_API_KEY",
-    docsUrl:"https://platform.deepseek.com/docs",
+    model:"deepseek-chat", envKey:"DEEPSEEK_API_KEY", docsUrl:"https://platform.deepseek.com/docs",
+    ollamaId:"deepseek-v3", ramQ4gb:400, vramQ4gb:null, localFeasible:false,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
         method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
         body: JSON.stringify({ model:"deepseek-chat", messages:[{role:"user",content:msg}], max_tokens:512 })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.choices[0].message.content;
     }
   },
-  { id:"qwen", name:"Qwen2.5-72B", org:"Alibaba", icon:"◈", type:"open", tags:["text","code"], free:true,
-    desc:"Top open-weight model for coding & math.", params:"72B", context:"128K",
-    mmlu:86.1, humaneval:87.2, mtbench:8.8, cost:"Free (self-host)",
+  { id:"deepseek_r1", name:"DeepSeek R1", org:"DeepSeek", icon:"◉", type:"open",
+    tags:["text","code","reasoning"], free:true, tier:"S",
+    desc:"Chain-of-thought reasoning model. Best open-source option for math and logic.",
+    params:"671B MoE", context:"128K", cost:"$0.55/1M in (API)",
+    mmlu:90.8, humaneval:90.2, mtbench:8.9, math500:97.3,
+    endpoint:"https://api.deepseek.com/v1/chat/completions",
+    model:"deepseek-reasoner", envKey:"DEEPSEEK_API_KEY", docsUrl:"https://platform.deepseek.com/docs",
+    ollamaId:"deepseek-r1:32b", ramQ4gb:20, vramQ4gb:20, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.deepseek.com/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"deepseek-reasoner", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"llama33_70b", name:"Llama 3.3 70B", org:"Meta AI", icon:"⬟", type:"open",
+    tags:["text","code"], free:true, tier:"A",
+    desc:"Best overall local model in 2026. Matches GPT-4 (2023) on MMLU. Needs ~40GB RAM at Q4.",
+    params:"70B", context:"128K", cost:"Free (self-host)",
+    mmlu:82.0, humaneval:88.0, mtbench:8.7, math500:77.0,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"meta-llama/Llama-3.3-70B-Instruct-Turbo", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/llama3.3",
+    ollamaId:"llama3.3:70b", ramQ4gb:40, vramQ4gb:40, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"meta-llama/Llama-3.3-70B-Instruct-Turbo", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"llama32_8b", name:"Llama 3.2 8B", org:"Meta AI", icon:"⬟", type:"open",
+    tags:["text","code"], free:true, tier:"B",
+    desc:"Runs on almost any modern PC with 8GB RAM. Best entry-level local model.",
+    params:"8B", context:"128K", cost:"Free (self-host)",
+    mmlu:73.0, humaneval:72.6, mtbench:7.8, math500:58.0,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"meta-llama/Llama-3.2-8B-Instruct-Turbo", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/llama3.2",
+    ollamaId:"llama3.2:8b", ramQ4gb:5, vramQ4gb:5, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"meta-llama/Llama-3.2-8B-Instruct-Turbo", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"llama32_3b", name:"Llama 3.2 3B", org:"Meta AI", icon:"⬟", type:"open",
+    tags:["text"], free:true, tier:"C",
+    desc:"Tiny but usable. 2GB RAM. Good for offline Q&A and note-taking on old hardware.",
+    params:"3B", context:"128K", cost:"Free (self-host)",
+    mmlu:63.0, humaneval:55.0, mtbench:7.0, math500:44.0,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"meta-llama/Llama-3.2-3B-Instruct-Turbo", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/llama3.2",
+    ollamaId:"llama3.2:3b", ramQ4gb:2.0, vramQ4gb:2.0, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"meta-llama/Llama-3.2-3B-Instruct-Turbo", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"qwen25_72b", name:"Qwen 2.5 72B", org:"Alibaba", icon:"◈", type:"open",
+    tags:["text","code"], free:true, tier:"A",
+    desc:"Best local coding model. 87% HumanEval. Supports 29 languages. Needs ~40GB RAM.",
+    params:"72B", context:"128K", cost:"Free (self-host)",
+    mmlu:86.1, humaneval:87.2, mtbench:8.8, math500:83.1,
     endpoint:"https://api.together.xyz/v1/chat/completions",
     model:"Qwen/Qwen2.5-72B-Instruct-Turbo", envKey:"TOGETHER_API_KEY",
-    docsUrl:"https://huggingface.co/Qwen",
+    docsUrl:"https://ollama.com/library/qwen2.5",
+    ollamaId:"qwen2.5:72b", ramQ4gb:40, vramQ4gb:40, localFeasible:true,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.together.xyz/v1/chat/completions", {
         method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
         body: JSON.stringify({ model:"Qwen/Qwen2.5-72B-Instruct-Turbo", messages:[{role:"user",content:msg}], max_tokens:512 })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.choices[0].message.content;
     }
   },
-  { id:"phi4", name:"Phi-4", org:"Microsoft", icon:"◻", type:"open", tags:["text","code"], free:true,
-    desc:"14B model that punches above its weight.", params:"14B", context:"16K",
-    mmlu:84.8, humaneval:82.6, mtbench:8.5, cost:"Free (self-host)",
+  { id:"qwen3_235b", name:"Qwen 3 235B", org:"Alibaba", icon:"◈", type:"open",
+    tags:["text","code","reasoning"], free:true, tier:"S",
+    desc:"235B MoE. Chatbot Arena 1422. Exceptional reasoning — too large for consumer hardware.",
+    params:"235B MoE", context:"32K", cost:"Free (self-host)",
+    mmlu:89.5, humaneval:91.0, mtbench:9.1, math500:92.3,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"Qwen/Qwen3-235B-A22B", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/qwen3",
+    ollamaId:"qwen3:235b", ramQ4gb:140, vramQ4gb:null, localFeasible:false,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"Qwen/Qwen3-235B-A22B", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"mistral_small", name:"Mistral Small 3.1", org:"Mistral AI", icon:"◬", type:"open",
+    tags:["text","code"], free:true, tier:"B",
+    desc:"24B. Best step-up from 7B models. Fits in 16GB RAM, 128K context.",
+    params:"24B", context:"128K", cost:"Free (self-host)",
+    mmlu:79.0, humaneval:74.0, mtbench:8.3, math500:65.0,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"mistralai/Mistral-Small-Instruct-2409", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/mistral-small3.1",
+    ollamaId:"mistral-small3.1", ramQ4gb:14, vramQ4gb:14, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"mistralai/Mistral-Small-Instruct-2409", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"gemma3_9b", name:"Gemma 3 9B", org:"Google", icon:"◇", type:"open",
+    tags:["text","vision","code"], free:true, tier:"B",
+    desc:"Best quality-per-GB at 9B class. Runs on 8GB RAM. Has a vision-capable multimodal variant.",
+    params:"9B", context:"128K", cost:"Free (self-host)",
+    mmlu:73.0, humaneval:68.0, mtbench:7.9, math500:59.6,
+    endpoint:"https://api.together.xyz/v1/chat/completions",
+    model:"google/gemma-3-9b-it", envKey:"TOGETHER_API_KEY",
+    docsUrl:"https://ollama.com/library/gemma3",
+    ollamaId:"gemma3:9b", ramQ4gb:6, vramQ4gb:6, localFeasible:true,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.together.xyz/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"google/gemma-3-9b-it", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"phi4mini", name:"Phi-4 Mini", org:"Microsoft", icon:"◻", type:"open",
+    tags:["text","code"], free:true, tier:"B",
+    desc:"3.8B. Best model under 4GB RAM. 68% MMLU — punches above its size. 30–50 tok/s on CPU.",
+    params:"3.8B", context:"16K", cost:"Free (self-host)",
+    mmlu:68.0, humaneval:72.0, mtbench:7.5, math500:59.2,
     endpoint:"https://api.together.xyz/v1/chat/completions",
     model:"microsoft/phi-4", envKey:"TOGETHER_API_KEY",
-    docsUrl:"https://huggingface.co/microsoft/phi-4",
+    docsUrl:"https://ollama.com/library/phi4-mini",
+    ollamaId:"phi4-mini", ramQ4gb:2.5, vramQ4gb:2.5, localFeasible:true,
     callFn: async (key, msg) => {
       const r = await fetch("https://api.together.xyz/v1/chat/completions", {
         method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
         body: JSON.stringify({ model:"microsoft/phi-4", messages:[{role:"user",content:msg}], max_tokens:512 })
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
+      return d.choices[0].message.content;
+    }
+  },
+  { id:"kimi_k2", name:"Kimi K2.5", org:"Moonshot AI", icon:"◑", type:"open",
+    tags:["text","code","reasoning"], free:true, tier:"S",
+    desc:"Highest HumanEval tracked: 99.0. Leads MMLU at 92.0. 1T params, 32B active per token.",
+    params:"1T MoE (32B active)", context:"262K", cost:"Free (self-host)",
+    mmlu:92.0, humaneval:99.0, mtbench:9.2, math500:98.0,
+    endpoint:"https://api.moonshot.cn/v1/chat/completions",
+    model:"kimi-k2", envKey:"MOONSHOT_API_KEY",
+    docsUrl:"https://platform.moonshot.cn/docs",
+    ollamaId:null, ramQ4gb:600, vramQ4gb:null, localFeasible:false,
+    callFn: async (key, msg) => {
+      const r = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method:"POST", headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+        body: JSON.stringify({ model:"kimi-k2", messages:[{role:"user",content:msg}], max_tokens:512 })
+      });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error?.message||"API error");
       return d.choices[0].message.content;
     }
   },
 ];
 
-// ── Styles ─────────────────────────────────────────────────────
-const S = {
-  app: {
-    background:"#0d0a06", color:"#e8dcc8", minHeight:"100vh",
-    fontFamily:"'Courier New', 'Courier', monospace",
-    position:"relative", overflow:"hidden"
-  },
-  // Nav
-  nav: {
-    position:"sticky", top:0, zIndex:200,
-    background:"rgba(13,10,6,0.92)", backdropFilter:"blur(20px)",
-    borderBottom:"1px solid #2a1f0e",
-    display:"flex", alignItems:"center", justifyContent:"space-between",
-    padding:"0 32px", height:60
-  },
-  navLogo: {
-    display:"flex", alignItems:"center", gap:10,
-    fontFamily:"'Georgia', serif", fontWeight:700,
-    fontSize:20, letterSpacing:"-0.5px", cursor:"pointer"
-  },
-  navLinks: { display:"flex", gap:4 },
-  navLink: (active) => ({
-    background: active ? "rgba(249,115,22,0.12)" : "transparent",
-    border: active ? "1px solid rgba(249,115,22,0.3)" : "1px solid transparent",
-    color: active ? "#f97316" : "#8a7a62",
-    padding:"6px 14px", borderRadius:6, cursor:"pointer",
-    fontSize:12, letterSpacing:"0.06em", transition:"all 0.15s",
-    fontFamily:"'Courier New', monospace"
-  }),
-  // Layout
-  main: { maxWidth:1280, margin:"0 auto", padding:"32px 32px" },
-  // Cards
-  card: (hover) => ({
-    background:"#120e08", border:`1px solid ${hover?"#f97316":"#2a1f0e"}`,
-    borderRadius:12, padding:24, transition:"all 0.2s", cursor:"pointer",
-    position:"relative", overflow:"hidden"
-  }),
-  // Inputs
-  input: {
-    background:"#1a1208", border:"1px solid #2a1f0e",
-    color:"#e8dcc8", padding:"10px 14px", borderRadius:8,
-    fontFamily:"'Courier New', monospace", fontSize:13, width:"100%",
-    outline:"none", transition:"border 0.15s"
-  },
-  btn: (variant="primary") => ({
-    background: variant==="primary" ? "#f97316" : variant==="ghost" ? "transparent" : "#1a1208",
-    color: variant==="primary" ? "#0d0a06" : "#e8dcc8",
-    border: variant==="ghost" ? "1px solid #2a1f0e" : "none",
-    padding:"9px 18px", borderRadius:7, cursor:"pointer",
-    fontFamily:"'Courier New', monospace", fontWeight:700,
-    fontSize:12, letterSpacing:"0.05em", transition:"all 0.15s",
-    display:"inline-flex", alignItems:"center", gap:6
-  }),
-  badge: (type) => {
-    const map = {
-      open:{bg:"rgba(34,197,94,0.1)",color:"#22c55e",border:"rgba(34,197,94,0.25)"},
-      closed:{bg:"rgba(249,115,22,0.1)",color:"#f97316",border:"rgba(249,115,22,0.25)"},
-      free:{bg:"rgba(234,179,8,0.1)",color:"#eab308",border:"rgba(234,179,8,0.25)"},
-      new:{bg:"rgba(239,68,68,0.1)",color:"#ef4444",border:"rgba(239,68,68,0.25)"},
-      vision:{bg:"rgba(139,92,246,0.1)",color:"#8b5cf6",border:"rgba(139,92,246,0.25)"},
-    };
-    const c = map[type]||map.open;
-    return { background:c.bg, color:c.color, border:`1px solid ${c.border}`,
-      padding:"2px 8px", borderRadius:4, fontSize:10, letterSpacing:"0.08em", fontWeight:600 };
-  },
-  sectionTitle: { fontFamily:"'Georgia', serif", fontSize:22, fontWeight:700, marginBottom:4, color:"#f4e4c4" },
-  muted: { color:"#6b5c42", fontSize:13 },
-  grid2: { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:16 },
-  grid3: { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 },
-  flex: (gap=12,align="center",justify="flex-start") => ({display:"flex",alignItems:align,justifyContent:justify,gap}),
-  tag: { background:"#1a1208", border:"1px solid #2a1f0e", color:"#8a7a62",
-    padding:"3px 8px", borderRadius:4, fontSize:11 },
+// ── Colors + shared styles ────────────────────────────────────
+const C = {
+  bg:"#0f0d0a", surface:"#161209", surface2:"#1c1710",
+  border:"#2c2318", borderH:"#5c3d1e",
+  text:"#e2d5c3", muted:"#7a6a55", faint:"#3a2f22",
+  orange:"#f97316", orangeL:"#fb923c", orangeDim:"rgba(249,115,22,0.12)",
+  green:"#22c55e", yellow:"#eab308", red:"#ef4444", purple:"#a78bfa",
 };
+const fl = (gap=12,a="center",j="flex-start") => ({display:"flex",alignItems:a,justifyContent:j,gap});
+const btn = (v="fill") => ({
+  background:v==="fill"?C.orange:v==="dim"?C.orangeDim:"transparent",
+  color:v==="fill"?"#111":v==="dim"?C.orange:C.muted,
+  border:v==="line"?`1px solid ${C.border}`:v==="dim"?`1px solid rgba(249,115,22,0.25)`:"none",
+  padding:"7px 14px", borderRadius:7, cursor:"pointer",
+  fontFamily:"inherit", fontWeight:v==="fill"?700:500,
+  fontSize:13, transition:"all 0.15s",
+  display:"inline-flex", alignItems:"center", gap:6
+});
+const card = { background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, transition:"all 0.15s" };
+const inp = { background:C.surface2, border:`1px solid ${C.border}`, color:C.text,
+  padding:"9px 12px", borderRadius:7, fontFamily:"ui-monospace,monospace",
+  fontSize:13, outline:"none", transition:"border 0.15s", width:"100%" };
+const badge = (t) => {
+  const m={S:{bg:"rgba(251,191,36,0.12)",c:"#fbbf24",b:"rgba(251,191,36,0.3)"},A:{bg:"rgba(249,115,22,0.12)",c:"#f97316",b:"rgba(249,115,22,0.3)"},B:{bg:"rgba(34,197,94,0.1)",c:"#22c55e",b:"rgba(34,197,94,0.25)"},C:{bg:"rgba(107,114,128,0.1)",c:"#9ca3af",b:"rgba(107,114,128,0.25)"},open:{bg:"rgba(34,197,94,0.08)",c:"#22c55e",b:"rgba(34,197,94,0.2)"},closed:{bg:"rgba(167,139,250,0.08)",c:"#a78bfa",b:"rgba(167,139,250,0.2)"},free:{bg:"rgba(234,179,8,0.08)",c:"#eab308",b:"rgba(234,179,8,0.2)"}};
+  const x=m[t]||m.C;
+  return {background:x.bg,color:x.c,border:`1px solid ${x.b}`,padding:"2px 7px",borderRadius:4,fontSize:10.5,fontWeight:600,letterSpacing:"0.04em"};
+};
+const main = { maxWidth:1200, margin:"0 auto", padding:"28px 24px" };
+const grid2 = { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:14 };
 
-// ── Scratch/Claw bg decoration ─────────────────────────────────
-const BgDecor = () => (
-  <svg style={{position:"fixed",inset:0,width:"100%",height:"100%",pointerEvents:"none",opacity:0.03,zIndex:0}} viewBox="0 0 800 600">
-    <path d="M0 150 C200 100 300 200 500 120 S700 180 800 140" stroke="#f97316" strokeWidth="1" fill="none"/>
-    <path d="M0 300 C150 250 350 350 550 270 S750 330 800 290" stroke="#f97316" strokeWidth="1" fill="none"/>
-    <path d="M0 450 C100 400 400 500 600 420 S780 480 800 440" stroke="#f97316" strokeWidth="1" fill="none"/>
-    <path d="M100 0 C80 150 120 300 90 450 S110 550 100 600" stroke="#f97316" strokeWidth="0.5" fill="none"/>
-    <path d="M400 0 C380 200 420 350 390 500 S410 580 400 600" stroke="#f97316" strokeWidth="0.5" fill="none"/>
-    <path d="M700 0 C680 180 720 320 690 470 S710 560 700 600" stroke="#f97316" strokeWidth="0.5" fill="none"/>
-  </svg>
-);
-
-// ══════════════════════════════════════════════════════════════
 export default function App() {
   const [page, setPage] = useState("explore");
-  const [apiKeys, setApiKeys] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("oc_keys")||"{}"); } catch { return {}; }
-  });
-  const [usageLogs, setUsageLogs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("oc_logs")||"[]"); } catch { return []; }
-  });
-  const [savedModels, setSavedModels] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("oc_saved")||"[]"); } catch { return []; }
-  });
+  const [apiKeys, setApiKeys] = useState(() => { try{return JSON.parse(localStorage.getItem("grip_keys")||"{}");}catch{return {};} });
+  const [logs, setLogs] = useState(() => { try{return JSON.parse(localStorage.getItem("grip_logs")||"[]");}catch{return [];} });
+  const [saved, setSaved] = useState(() => { try{return JSON.parse(localStorage.getItem("grip_saved")||"[]");}catch{return [];} });
   const [filterType, setFilterType] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
-  const [searchQ, setSearchQ] = useState("");
+  const [search, setSearch] = useState("");
   const [compareList, setCompareList] = useState([]);
   const [testModal, setTestModal] = useState(null);
   const [keyModal, setKeyModal] = useState(null);
-  const [hovered, setHovered] = useState(null);
 
-  // Persist
-  useEffect(() => { localStorage.setItem("oc_keys", JSON.stringify(apiKeys)); }, [apiKeys]);
-  useEffect(() => { localStorage.setItem("oc_logs", JSON.stringify(usageLogs)); }, [usageLogs]);
-  useEffect(() => { localStorage.setItem("oc_saved", JSON.stringify(savedModels)); }, [savedModels]);
+  useEffect(()=>{ localStorage.setItem("grip_keys",JSON.stringify(apiKeys)); },[apiKeys]);
+  useEffect(()=>{ localStorage.setItem("grip_logs",JSON.stringify(logs)); },[logs]);
+  useEffect(()=>{ localStorage.setItem("grip_saved",JSON.stringify(saved)); },[saved]);
 
-  const logUsage = (modelId, prompt, success, tokens) => {
-    setUsageLogs(p => [{
-      id: Date.now(), modelId, prompt: prompt.slice(0,60),
-      success, tokens, ts: new Date().toISOString()
-    }, ...p].slice(0, 200));
-  };
+  const addLog = (modelId,prompt,ok,tokens) =>
+    setLogs(p=>[{id:Date.now(),modelId,prompt:prompt.slice(0,60),ok,tokens,ts:new Date().toISOString()},...p].slice(0,200));
 
-  const toggleSave = (id) => {
-    setSavedModels(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
-  };
-
-  const toggleCompare = (id) => {
-    setCompareList(p => p.includes(id) ? p.filter(x=>x!==id) : p.length < 3 ? [...p, id] : p);
-  };
-
-  // Filter models
   const filtered = MODELS.filter(m => {
-    if (filterType === "open" && m.type !== "open") return false;
-    if (filterType === "closed" && m.type !== "closed") return false;
-    if (filterType === "saved" && !savedModels.includes(m.id)) return false;
-    if (filterTag !== "all" && !m.tags.includes(filterTag)) return false;
-    if (searchQ) {
-      const q = searchQ.toLowerCase();
-      if (!m.name.toLowerCase().includes(q) && !m.org.toLowerCase().includes(q) && !m.tags.some(t=>t.includes(q))) return false;
-    }
+    if (filterType==="open"&&m.type!=="open") return false;
+    if (filterType==="closed"&&m.type!=="closed") return false;
+    if (filterType==="saved"&&!saved.includes(m.id)) return false;
+    if (filterTag!=="all"&&!m.tags.includes(filterTag)) return false;
+    if (search){const q=search.toLowerCase();if(!m.name.toLowerCase().includes(q)&&!m.org.toLowerCase().includes(q)&&!m.tags.some(t=>t.includes(q)))return false;}
     return true;
   });
 
-  const pages = [
-    { id:"explore", label:"EXPLORE" },
-    { id:"leaderboard", label:"LEADERBOARD" },
-    { id:"playground", label:"PLAYGROUND" },
-    { id:"compare", label:`COMPARE${compareList.length>0?` (${compareList.length})`:""}` },
-    { id:"hardware", label:"⚙ HW CHECK" },
-    { id:"dashboard", label:"DASHBOARD" },
+  const nav = [
+    {id:"explore",l:"Models"},
+    {id:"leaderboard",l:"Leaderboard"},
+    {id:"playground",l:"Playground"},
+    {id:"compare",l:compareList.length>0?`Compare (${compareList.length})`:"Compare"},
+    {id:"hardware",l:"Can I Run It?"},
+    {id:"claude_skills",l:"Claude Skills"},
+    {id:"dashboard",l:"Dashboard"},
   ];
 
   return (
-    <div style={S.app}>
+    <div style={{background:C.bg,color:C.text,minHeight:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap');
-        * { box-sizing: border-box; margin:0; padding:0; }
-        ::-webkit-scrollbar { width:6px; height:6px; }
-        ::-webkit-scrollbar-track { background:#0d0a06; }
-        ::-webkit-scrollbar-thumb { background:#2a1f0e; border-radius:3px; }
-        input:focus { border-color:#f97316 !important; }
-        textarea:focus { border-color:#f97316 !important; }
-        select:focus { outline:none; border-color:#f97316 !important; }
-        @keyframes slideIn { from { transform:translateX(40px); opacity:0; } to { transform:translateX(0); opacity:1; } }
-        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes scratch { from { strokeDashoffset: 100; } to { strokeDashoffset: 0; } }
-        .page-enter { animation: fadeIn 0.35s ease; }
-        .hov-card:hover { border-color:#f97316 !important; transform:translateY(-2px); }
-        .hov-btn:hover { opacity:0.82; transform:translateY(-1px); }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        ::-webkit-scrollbar{width:5px;height:5px;}
+        ::-webkit-scrollbar-track{background:${C.bg};}
+        ::-webkit-scrollbar-thumb{background:${C.faint};border-radius:3px;}
+        input:focus,textarea:focus{border-color:${C.orange}!important;}
+        @keyframes toastIn{from{transform:translateX(20px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+        .fade{animation:fadeUp 0.3s ease;}
+        .hov:hover{opacity:0.8;}
+        .ch:hover{border-color:${C.borderH}!important;transform:translateY(-1px);}
       `}</style>
-
-      <BgDecor />
       <Toast />
 
-      {/* NAV */}
-      <nav style={S.nav}>
-        <div style={S.navLogo} onClick={() => setPage("explore")}>
-          <ClawMark size={28} />
-          <span style={{color:"#f4e4c4"}}>Open</span>
-          <span style={{color:"#f97316"}}>Claw</span>
+      <nav style={{position:"sticky",top:0,zIndex:200,height:54,background:"rgba(15,13,10,0.96)",backdropFilter:"blur(16px)",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 26px"}}>
+        <div style={{...fl(8),cursor:"pointer"}} onClick={()=>setPage("explore")}>
+          <GripMark size={22}/>
+          <span style={{fontSize:16,fontWeight:700,letterSpacing:"-0.3px"}}>Gr<span style={{color:C.orange}}>(I)</span>p</span>
         </div>
-        <div style={S.navLinks}>
-          {pages.map(p => (
-            <button key={p.id} style={S.navLink(page===p.id)} onClick={()=>setPage(p.id)}
-              className="hov-btn">{p.label}</button>
+        <div style={fl(2)}>
+          {nav.map(n=>(
+            <button key={n.id} style={{background:page===n.id?C.orangeDim:"transparent",border:page===n.id?`1px solid rgba(249,115,22,0.25)`:"1px solid transparent",color:page===n.id?C.orange:C.muted,padding:"5px 11px",borderRadius:6,cursor:"pointer",fontSize:12.5,fontFamily:"inherit",transition:"all 0.12s"}} onClick={()=>setPage(n.id)} className="hov">{n.l}</button>
           ))}
         </div>
-        <button style={{...S.btn("primary"), fontSize:11}} className="hov-btn" onClick={()=>setPage("dashboard")}>
-          <span>⚙</span> API Keys
-        </button>
+        <button style={btn("fill")} className="hov" onClick={()=>setPage("dashboard")}>⚙ Keys</button>
       </nav>
 
-      <div style={{position:"relative", zIndex:1}}>
-        {page === "explore" && (
-          <ExplorePage
-            filtered={filtered} models={MODELS} apiKeys={apiKeys}
-            filterType={filterType} setFilterType={setFilterType}
-            filterTag={filterTag} setFilterTag={setFilterTag}
-            searchQ={searchQ} setSearchQ={setSearchQ}
-            savedModels={savedModels} toggleSave={toggleSave}
-            compareList={compareList} toggleCompare={toggleCompare}
-            setTestModal={setTestModal} setKeyModal={setKeyModal}
-            setPage={setPage}
-          />
-        )}
-        {page === "leaderboard" && <LeaderboardPage models={MODELS} apiKeys={apiKeys} setTestModal={setTestModal} />}
-        {page === "playground" && <PlaygroundPage models={MODELS} apiKeys={apiKeys} logUsage={logUsage} />}
-        {page === "compare" && <ComparePage compareList={compareList} models={MODELS} apiKeys={apiKeys} setCompareList={setCompareList} toggleCompare={toggleCompare} />}
-        {page === "hardware" && <HardwarePage models={MODELS} />}
-        {page === "dashboard" && <DashboardPage apiKeys={apiKeys} setApiKeys={setApiKeys} usageLogs={usageLogs} savedModels={savedModels} models={MODELS} setPage={setPage} />}
+      <div style={{position:"relative",zIndex:1}}>
+        {page==="explore"&&<ExplorePage filtered={filtered} apiKeys={apiKeys} filterType={filterType} setFilterType={setFilterType} filterTag={filterTag} setFilterTag={setFilterTag} search={search} setSearch={setSearch} saved={saved} setSaved={setSaved} compareList={compareList} setCompareList={setCompareList} setTestModal={setTestModal} setKeyModal={setKeyModal} setPage={setPage}/>}
+        {page==="leaderboard"&&<LeaderboardPage models={MODELS} apiKeys={apiKeys} setTestModal={setTestModal}/>}
+        {page==="playground"&&<PlaygroundPage models={MODELS} apiKeys={apiKeys} addLog={addLog}/>}
+        {page==="compare"&&<ComparePage compareList={compareList} models={MODELS} setCompareList={setCompareList}/>}
+        {page==="hardware"&&<HardwarePage models={MODELS}/>}
+        {page==="claude_skills"&&<ClaudeSkillsPage apiKeys={apiKeys} addLog={addLog}/>}
+        {page==="dashboard"&&<DashboardPage apiKeys={apiKeys} setApiKeys={setApiKeys} logs={logs} setLogs={setLogs} saved={saved} models={MODELS} setPage={setPage}/>}
       </div>
 
-      {/* FOOTER BRANDING */}
-      <div style={{position:"relative",zIndex:1,borderTop:"1px solid #1e1508",
-        padding:"20px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",
-        marginTop:40}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <ClawMark size={20} />
-          <span style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>Open<span style={{color:"#f97316"}}>Claw</span></span>
-          <span style={{color:"#2a1f0e",fontSize:12}}>|</span>
-          <span style={{fontSize:11,color:"#6b5c42"}}>by <strong style={{color:"#f97316",letterSpacing:"0.05em"}}>projectAdnan</strong></span>
+      <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 26px",marginTop:48,display:"flex",alignItems:"center",justifyContent:"space-between",position:"relative",zIndex:1}}>
+        <div style={fl(8)}>
+          <GripMark size={16}/>
+          <span style={{fontSize:12.5,color:C.muted}}>Gr<span style={{color:C.orange}}>(I)</span>p &nbsp;·&nbsp; by <strong style={{color:C.orangeL}}>projectAdnan</strong></span>
         </div>
-        <div style={{fontSize:11,color:"#6b5c42"}}>
-          127+ models · Keys stored locally · No tracking
-        </div>
-        <div style={{fontSize:11,color:"#3a2a1a"}}>v1.0.0 · 2026</div>
+        <span style={{fontSize:11,color:C.faint}}>Benchmarks from public evaluations · Keys stay local</span>
       </div>
 
-      {/* Test Modal */}
-      {testModal && (
-        <TestModal model={testModal} apiKeys={apiKeys} logUsage={logUsage}
-          onClose={() => setTestModal(null)} onAddKey={() => { setKeyModal(testModal); setTestModal(null); }} />
-      )}
-      {/* Key Modal */}
-      {keyModal && (
-        <KeyModal model={keyModal} apiKeys={apiKeys} setApiKeys={setApiKeys}
-          onClose={() => setKeyModal(null)} />
-      )}
+      {testModal&&<TestModal model={testModal} apiKeys={apiKeys} addLog={addLog} onClose={()=>setTestModal(null)} onKey={()=>{setKeyModal(testModal);setTestModal(null);}}/>}
+      {keyModal&&<KeyModal model={keyModal} apiKeys={apiKeys} setApiKeys={setApiKeys} onClose={()=>setKeyModal(null)}/>}
     </div>
   );
 }
 
-// ══ EXPLORE PAGE ═══════════════════════════════════════════════
-function ExplorePage({ filtered, models, apiKeys, filterType, setFilterType, filterTag, setFilterTag,
-  searchQ, setSearchQ, savedModels, toggleSave, compareList, toggleCompare, setTestModal, setKeyModal, setPage }) {
-
+function ExplorePage({filtered,apiKeys,filterType,setFilterType,filterTag,setFilterTag,search,setSearch,saved,setSaved,compareList,setCompareList,setTestModal,setKeyModal,setPage}) {
   return (
-    <div style={S.main} className="page-enter">
-      {/* Hero */}
-      <div style={{padding:"48px 0 40px", borderBottom:"1px solid #1e1508", marginBottom:32}}>
-        <div style={{...S.flex(8,"center"), marginBottom:16}}>
-          <ClawMark size={36} />
-          <div>
-            <div style={{fontFamily:"Georgia,serif", fontSize:40, fontWeight:700, lineHeight:1.1, color:"#f4e4c4", letterSpacing:"-1px"}}>
-              Every AI Model. <span style={{color:"#f97316"}}>Clawed Open.</span>
-            </div>
-            <div style={{color:"#6b5c42", fontSize:15, marginTop:8}}>
-              Discover, compare, test and access APIs for open & closed AI models — all in one hunt.
-            </div>
-          </div>
+    <div style={main} className="fade">
+      <div style={{padding:"34px 0 26px",borderBottom:`1px solid ${C.border}`,marginBottom:22}}>
+        <div style={{fontSize:30,fontWeight:700,letterSpacing:"-0.7px",color:C.text,marginBottom:8,lineHeight:1.2}}>
+          Every AI model,<br/><span style={{color:C.orange}}>one place.</span>
         </div>
-        <div style={S.flex(12,"center")}>
-          {[
-            {n:"127+", l:"Models Tracked"},
-            {n:"48", l:"Open Source"},
-            {n:"79", l:"Closed / API"},
-            {n:"14", l:"Benchmarks"},
-          ].map(s => (
-            <div key={s.l} style={{background:"#120e08", border:"1px solid #2a1f0e", borderRadius:10,
-              padding:"14px 24px", textAlign:"center"}}>
-              <div style={{fontFamily:"Georgia,serif", fontSize:24, fontWeight:700, color:"#f97316"}}>{s.n}</div>
-              <div style={{color:"#6b5c42", fontSize:11, marginTop:2, letterSpacing:"0.06em"}}>{s.l}</div>
+        <div style={{color:C.muted,fontSize:14,maxWidth:460}}>Browse open and closed models, real benchmarks, API snippets, live testing. No fluff.</div>
+        <div style={{...fl(12),marginTop:18,flexWrap:"wrap"}}>
+          {[{n:MODELS.length,l:"models"},{n:MODELS.filter(m=>m.type==="open").length,l:"open source"},{n:MODELS.filter(m=>m.type==="closed").length,l:"closed"},{n:"4",l:"benchmarks"}].map(s=>(
+            <div key={s.l} style={{...card,padding:"10px 16px",minWidth:80}}>
+              <div style={{fontSize:19,fontWeight:700,color:C.orange}}>{s.n}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>{s.l}</div>
             </div>
           ))}
-          <button style={{...S.btn("ghost"), marginLeft:"auto"}} onClick={() => setPage("compare")}
-            className="hov-btn">
-            {compareList.length > 0 ? `⊞ Compare (${compareList.length})` : "⊞ Compare Models"}
-          </button>
+          {compareList.length>0&&<button style={{...btn("dim"),marginLeft:"auto"}} onClick={()=>setPage("compare")} className="hov">⊞ Compare ({compareList.length})</button>}
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{...S.flex(12,"flex-start","flex-start"), flexDirection:"column", marginBottom:24, gap:12}}>
-        <div style={S.flex(8)}>
-          <div style={{position:"relative", flex:1, maxWidth:360}}>
-            <span style={{position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"#6b5c42", fontSize:14}}>⌕</span>
-            <input style={{...S.input, paddingLeft:34}} placeholder="Search models, orgs, tags..." value={searchQ} onChange={e=>setSearchQ(e.target.value)} />
-          </div>
-          <span style={{color:"#6b5c42", fontSize:12}}>{filtered.length} models</span>
+      <div style={{...fl(8),marginBottom:14,flexWrap:"wrap",gap:7}}>
+        <div style={{position:"relative",flex:1,minWidth:180,maxWidth:320}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>⌕</span>
+          <input style={{...inp,paddingLeft:28}} placeholder="Search models…" value={search} onChange={e=>setSearch(e.target.value)}/>
         </div>
-        <div style={S.flex(6)}>
-          {[["all","All"],["open","Open Source"],["closed","Closed / API"],["saved","Saved"]].map(([v,l]) => (
-            <button key={v} style={{
-              ...S.btn("ghost"),
-              borderColor: filterType===v ? "#f97316" : "#2a1f0e",
-              color: filterType===v ? "#f97316" : "#8a7a62",
-              background: filterType===v ? "rgba(249,115,22,0.08)" : "#120e08"
-            }} onClick={() => setFilterType(v)} className="hov-btn">{l}</button>
+        <div style={fl(5,undefined,undefined,{flexWrap:"wrap"})}>
+          {[["all","All"],["open","Open"],["closed","Closed"],["saved","Saved"]].map(([v,l])=>(
+            <button key={v} style={{...btn(filterType===v?"dim":"line"),fontSize:12}} onClick={()=>setFilterType(v)} className="hov">{l}</button>
           ))}
-          <div style={{width:1, height:24, background:"#2a1f0e"}} />
-          {["all","text","code","vision"].map(t => (
-            <button key={t} style={{
-              ...S.btn("ghost"), fontSize:11,
-              borderColor: filterTag===t ? "#f97316" : "#2a1f0e",
-              color: filterTag===t ? "#f97316" : "#6b5c42"
-            }} onClick={() => setFilterTag(t)} className="hov-btn">{t.toUpperCase()}</button>
+          <div style={{width:1,height:18,background:C.border}}/>
+          {["all","text","code","vision","reasoning"].map(t=>(
+            <button key={t} style={{...btn(filterTag===t?"dim":"line"),fontSize:11,padding:"5px 9px"}} onClick={()=>setFilterTag(t)} className="hov">{t}</button>
           ))}
         </div>
+        <span style={{color:C.muted,fontSize:11.5,alignSelf:"center"}}>{filtered.length} shown</span>
       </div>
 
-      {/* Grid */}
-      <div style={S.grid2}>
-        {filtered.map(m => (
+      <div style={grid2}>
+        {filtered.map(m=>(
           <ModelCard key={m.id} model={m} apiKeys={apiKeys}
-            saved={savedModels.includes(m.id)} onToggleSave={() => toggleSave(m.id)}
-            comparing={compareList.includes(m.id)} onToggleCompare={() => toggleCompare(m.id)}
-            onTest={() => setTestModal(m)} onAddKey={() => setKeyModal(m)} />
+            saved={saved.includes(m.id)} onSave={()=>setSaved(p=>p.includes(m.id)?p.filter(x=>x!==m.id):[...p,m.id])}
+            comparing={compareList.includes(m.id)} onCompare={()=>setCompareList(p=>p.includes(m.id)?p.filter(x=>x!==m.id):p.length<3?[...p,m.id]:p)}
+            onTest={()=>setTestModal(m)} onKey={()=>setKeyModal(m)}/>
         ))}
-        {filtered.length === 0 && (
-          <div style={{gridColumn:"1/-1", textAlign:"center", padding:60, color:"#6b5c42"}}>
-            <ClawMark size={48} color="#2a1f0e" />
-            <div style={{marginTop:16, fontSize:14}}>No models match your filters.</div>
-          </div>
-        )}
+        {filtered.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:56,color:C.muted}}><div style={{fontSize:28,marginBottom:10}}>◫</div><div>No models match.</div></div>}
       </div>
     </div>
   );
 }
 
-// ══ MODEL CARD ════════════════════════════════════════════════
-function ModelCard({ model:m, apiKeys, saved, onToggleSave, comparing, onToggleCompare, onTest, onAddKey }) {
-  const hasKey = !!apiKeys[m.id];
-  const [hover, setHover] = useState(false);
-
+function ModelCard({model:m,apiKeys,saved,onSave,comparing,onCompare,onTest,onKey}) {
+  const [hov,setHov]=useState(false);
+  const hasKey=!!apiKeys[m.id];
   return (
-    <div className="hov-card" style={{
-      background:"#120e08", border:`1px solid ${hover?"#f97316":comparing?"rgba(249,115,22,0.4)":"#2a1f0e"}`,
-      borderRadius:12, padding:20, transition:"all 0.2s", position:"relative", overflow:"hidden"
-    }} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}>
-      {/* Top accent line */}
-      <div style={{position:"absolute",top:0,left:0,right:0,height:2,
-        background: m.type==="open" ? "#22c55e" : "#f97316",
-        transform:`scaleX(${hover?1:0})`, transformOrigin:"left", transition:"transform 0.3s"}} />
-
-      <div style={S.flex(12,"flex-start","space-between")}>
-        <div style={S.flex(10)}>
-          <div style={{width:40,height:40,background:"rgba(249,115,22,0.08)",border:"1px solid #2a1f0e",
-            borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",
-            fontSize:18,color:"#f97316"}}>
-            {m.icon}
-          </div>
+    <div className="ch" style={{...card,padding:19,borderColor:comparing?"rgba(249,115,22,0.5)":hov?C.borderH:C.border,boxShadow:hov?"0 4px 20px rgba(0,0,0,0.3)":"none"}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+      <div style={{...fl(0,"flex-start","space-between"),marginBottom:13}}>
+        <div style={fl(9)}>
+          <div style={{width:36,height:36,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:C.orange,flexShrink:0}}>{m.icon}</div>
           <div>
-            <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:15,color:"#f4e4c4"}}>{m.name}</div>
-            <div style={{color:"#6b5c42",fontSize:11,marginTop:2}}>{m.org}</div>
+            <div style={{fontWeight:700,fontSize:14.5,color:C.text}}>{m.name}</div>
+            <div style={{fontSize:11.5,color:C.muted}}>{m.org}</div>
           </div>
         </div>
-        <div style={S.flex(6)}>
-          <button style={{background:"none",border:"none",cursor:"pointer",
-            fontSize:16, color: saved?"#f97316":"#3a2a1a", padding:4}}
-            onClick={onToggleSave} title="Save model">
-            {saved ? "★" : "☆"}
-          </button>
-          <button style={{background:comparing?"rgba(249,115,22,0.12)":"none",
-            border:comparing?"1px solid #f97316":"1px solid #2a1f0e",
-            color:comparing?"#f97316":"#6b5c42",
-            borderRadius:4,padding:"3px 8px",cursor:"pointer",fontSize:10,fontFamily:"'Courier New',monospace"}}
-            onClick={onToggleCompare}>
-            {comparing ? "⊟" : "⊞"}
-          </button>
+        <div style={fl(6)}>
+          <button style={{background:"none",border:"none",cursor:"pointer",color:saved?C.orange:C.faint,fontSize:17,padding:3}} onClick={onSave}>{saved?"★":"☆"}</button>
+          <button style={{...btn(comparing?"dim":"line"),padding:"3px 7px",fontSize:11}} onClick={onCompare}>{comparing?"⊟":"⊞"}</button>
         </div>
       </div>
 
-      <div style={{...S.flex(6), marginTop:10, flexWrap:"wrap"}}>
-        <span style={S.badge(m.type)}>{m.type==="open"?"OPEN":"CLOSED"}</span>
-        {m.free && <span style={S.badge("free")}>FREE TIER</span>}
-        {m.tags.includes("vision") && <span style={S.badge("vision")}>VISION</span>}
-        {m.tags.map(t => <span key={t} style={S.tag}>{t}</span>)}
+      <div style={{...fl(5),flexWrap:"wrap",marginBottom:11}}>
+        <span style={badge(m.tier)}>{m.tier}-tier</span>
+        <span style={badge(m.type)}>{m.type==="open"?"open src":"closed"}</span>
+        {m.free&&<span style={badge("free")}>free tier</span>}
+        {m.tags.map(t=><span key={t} style={{background:C.surface2,border:`1px solid ${C.border}`,color:C.muted,padding:"2px 6px",borderRadius:4,fontSize:10.5}}>{t}</span>)}
       </div>
 
-      <div style={{color:"#8a7a62",fontSize:12,lineHeight:1.6,margin:"12px 0"}}>{m.desc}</div>
+      <div style={{color:C.muted,fontSize:12.5,lineHeight:1.65,marginBottom:13}}>{m.desc}</div>
 
-      <div style={{...S.flex(0,"stretch","space-between"), flexDirection:"column", gap:6, marginBottom:14}}>
-        {[["MMLU", m.mmlu, 100], ["HumanEval", m.humaneval, 100]].map(([label, val, max]) => (
-          <div key={label}>
-            <div style={{...S.flex(0,"center","space-between"), marginBottom:3}}>
-              <span style={{fontSize:10,color:"#6b5c42",letterSpacing:"0.05em"}}>{label}</span>
-              <span style={{fontSize:11,color:"#e8dcc8"}}>{val}%</span>
+      <div style={{marginBottom:13}}>
+        {[["MMLU",m.mmlu],["HumanEval",m.humaneval]].map(([l,v])=>(
+          <div key={l} style={{marginBottom:6}}>
+            <div style={{...fl(0,"center","space-between"),marginBottom:3}}>
+              <span style={{fontSize:11,color:C.muted}}>{l}</span>
+              <span style={{fontSize:11.5,color:C.text,fontWeight:600}}>{v}%</span>
             </div>
-            <div style={{height:3,background:"#1a1208",borderRadius:2,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${val/max*100}%`,
-                background:"linear-gradient(90deg,#f97316,#fbbf24)",borderRadius:2,
-                transition:"width 1s ease"}} />
+            <div style={{height:3,background:C.faint,borderRadius:2,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${v}%`,background:`linear-gradient(90deg,${C.orange},#fbbf24)`,borderRadius:2}}/>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{...S.flex(6,"center","space-between"), paddingTop:12, borderTop:"1px solid #1e1508"}}>
-        <div style={{fontSize:11,color:"#6b5c42"}}>
-          <span style={{color:"#e8dcc8"}}>{m.params}</span> · <span style={{color:"#e8dcc8"}}>{m.context} ctx</span> · {m.cost}
-        </div>
-        <div style={S.flex(6)}>
-          {hasKey ? (
-            <button style={S.btn("primary")} onClick={onTest} className="hov-btn">▶ Test</button>
-          ) : (
-            <button style={{...S.btn("ghost"), borderColor:"#f97316", color:"#f97316"}}
-              onClick={onAddKey} className="hov-btn">+ Add Key</button>
-          )}
-          <a href={m.docsUrl} target="_blank" rel="noreferrer"
-            style={{...S.btn("ghost"), textDecoration:"none"}}>Docs ↗</a>
+      <div style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,padding:"9px 11px",marginBottom:13,fontFamily:"ui-monospace,monospace",fontSize:11}}>
+        <span style={{color:"#7c9af4"}}>model</span><span style={{color:C.muted}}>: </span><span style={{color:"#f87171"}}>"{m.model}"</span><br/>
+        <span style={{color:"#7c9af4"}}>endpoint</span><span style={{color:C.muted}}>: </span><span style={{color:"#86efac"}}>{m.endpoint.replace("https://","").slice(0,35)}…</span>
+      </div>
+
+      <div style={{...fl(0,"center","space-between"),paddingTop:11,borderTop:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11.5,color:C.muted}}><span style={{color:C.text}}>{m.params}</span> · <span style={{color:C.text}}>{m.context}</span></div>
+        <div style={fl(6)}>
+          {hasKey?<button style={btn("fill")} onClick={onTest} className="hov">▶ Test</button>:<button style={btn("dim")} onClick={onKey} className="hov">+ Key</button>}
+          <a href={m.docsUrl} target="_blank" rel="noreferrer" style={{...btn("line"),textDecoration:"none",fontSize:12}}>Docs ↗</a>
         </div>
       </div>
     </div>
   );
 }
 
-// ══ LEADERBOARD PAGE ══════════════════════════════════════════
-function LeaderboardPage({ models, apiKeys, setTestModal }) {
-  const [sortBy, setSortBy] = useState("overall");
-  const [bench, setBench] = useState("all");
-
-  const scored = models.map(m => ({
-    ...m,
-    overall: ((m.mmlu + m.humaneval + m.mtbench*10) / 3).toFixed(1),
-    score: sortBy==="mmlu" ? m.mmlu : sortBy==="humaneval" ? m.humaneval : sortBy==="mtbench" ? m.mtbench*10 : ((m.mmlu + m.humaneval + m.mtbench*10)/3)
-  })).sort((a,b)=>b.score-a.score);
-
+function LeaderboardPage({models,apiKeys,setTestModal}) {
+  const [sort,setSort]=useState("overall");
+  const scored=[...models].map(m=>({...m,overall:((m.mmlu+m.humaneval+m.mtbench*10+m.math500)/4).toFixed(1)})).sort((a,b)=>sort==="mmlu"?b.mmlu-a.mmlu:sort==="he"?b.humaneval-a.humaneval:sort==="math"?b.math500-a.math500:parseFloat(b.overall)-parseFloat(a.overall));
   return (
-    <div style={S.main} className="page-enter">
-      <div style={{marginBottom:32}}>
-        <div style={S.sectionTitle}>Performance Leaderboard</div>
-        <div style={S.muted}>Live rankings across MMLU, HumanEval and MT-Bench evaluations</div>
+    <div style={main} className="fade">
+      <div style={{marginBottom:22}}>
+        <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:3}}>Performance Leaderboard</div>
+        <div style={{color:C.muted,fontSize:13}}>Scores sourced from public 2026 evaluations — MMLU, HumanEval, MATH-500, MT-Bench.</div>
       </div>
-
-      <div style={S.flex(8,"center","space-between",{marginBottom:24})}>
-        <div style={S.flex(6)}>
-          {[["overall","Overall"],["mmlu","MMLU"],["humaneval","HumanEval"],["mtbench","MT-Bench"]].map(([v,l]) => (
-            <button key={v} style={{
-              ...S.btn("ghost"), fontSize:11,
-              borderColor:sortBy===v?"#f97316":"#2a1f0e",
-              color:sortBy===v?"#f97316":"#6b5c42",
-              background:sortBy===v?"rgba(249,115,22,0.08)":"#120e08"
-            }} onClick={()=>setSortBy(v)} className="hov-btn">{l}</button>
-          ))}
-        </div>
-        <div style={{color:"#6b5c42",fontSize:12}}>{scored.length} models ranked</div>
+      <div style={{...fl(6),marginBottom:18}}>
+        {[["overall","Overall"],["mmlu","MMLU"],["he","HumanEval"],["math","MATH-500"]].map(([v,l])=>(
+          <button key={v} style={{...btn(sort===v?"dim":"line"),fontSize:12}} onClick={()=>setSort(v)} className="hov">{l}</button>
+        ))}
       </div>
-
-      <div style={{background:"#120e08", border:"1px solid #2a1f0e", borderRadius:12, overflow:"hidden"}}>
-        {/* Header */}
-        <div style={{display:"grid", gridTemplateColumns:"48px 1fr 110px 110px 110px 100px 120px",
-          padding:"12px 20px", background:"#1a1208", borderBottom:"1px solid #2a1f0e",
-          fontSize:10, color:"#6b5c42", letterSpacing:"0.08em"}}>
-          <div>#</div><div>MODEL</div><div>MMLU</div><div>HUMANEVAL</div><div>MT-BENCH</div>
-          <div>OVERALL</div><div style={{textAlign:"right"}}>ACTION</div>
+      <div style={{...card,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"42px 1fr 88px 88px 88px 88px 100px",padding:"9px 16px",background:C.surface2,borderBottom:`1px solid ${C.border}`,fontSize:10.5,color:C.muted,letterSpacing:"0.05em"}}>
+          <div>#</div><div>MODEL</div><div>MMLU</div><div>HUMANEVAL</div><div>MATH-500</div><div>MT-BENCH</div><div style={{textAlign:"right"}}>OVERALL</div>
         </div>
-
-        {scored.map((m, i) => {
-          const rankColors = ["#ffd700","#c0c0c0","#cd7f32"];
-          const hasKey = !!apiKeys[m.id];
+        {scored.map((m,i)=>{
+          const rc=i===0?"#fbbf24":i===1?"#d1d5db":i===2?"#cd7f32":C.muted;
           return (
-            <div key={m.id} style={{display:"grid",
-              gridTemplateColumns:"48px 1fr 110px 110px 110px 100px 120px",
-              padding:"14px 20px", borderBottom:"1px solid #1a1208",
-              alignItems:"center", transition:"background 0.15s",
-              cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background="#1a1208"}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:16,
-                color:rankColors[i]||"#6b5c42"}}>{i+1}</div>
-              <div style={S.flex(10)}>
-                <div style={{width:32,height:32,background:"rgba(249,115,22,0.08)",border:"1px solid #2a1f0e",
-                  borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:14,color:"#f97316"}}>{m.icon}</div>
-                <div>
-                  <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:"#f4e4c4"}}>{m.name}</div>
-                  <div style={{fontSize:11,color:"#6b5c42"}}>{m.org}</div>
-                </div>
-                <span style={S.badge(m.type)}>{m.type==="open"?"OPEN":"CLOSED"}</span>
+            <div key={m.id} style={{display:"grid",gridTemplateColumns:"42px 1fr 88px 88px 88px 88px 100px",padding:"12px 16px",borderBottom:`1px solid ${C.faint}`,alignItems:"center",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=C.surface2} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{fontWeight:700,fontSize:15,color:rc}}>{i+1}</div>
+              <div style={fl(8)}>
+                <span style={{color:C.orange,fontSize:16}}>{m.icon}</span>
+                <div><div style={{fontWeight:600,fontSize:13,color:C.text}}>{m.name}</div><div style={{fontSize:11,color:C.muted}}>{m.org}</div></div>
+                <span style={badge(m.tier)}>{m.tier}</span>
+                <span style={badge(m.type)}>{m.type==="open"?"open":"closed"}</span>
               </div>
-              {[m.mmlu, m.humaneval, m.mtbench*10].map((v,idx) => (
-                <div key={idx}>
-                  <div style={{fontSize:13,color:"#e8dcc8",fontWeight:600}}>{v.toFixed(1)}</div>
-                  <div style={{height:2,background:"#1a1208",borderRadius:1,marginTop:4,width:70,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${v}%`,background:"linear-gradient(90deg,#f97316,#fbbf24)",borderRadius:1}} />
-                  </div>
-                </div>
+              {[m.mmlu,m.humaneval,m.math500,m.mtbench].map((v,idx)=>(
+                <div key={idx}><div style={{fontSize:13,color:C.text,fontWeight:600}}>{v}</div><div style={{height:2,background:C.faint,borderRadius:1,marginTop:3,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(v,100)}%`,background:C.orange,borderRadius:1}}/></div></div>
               ))}
-              <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:16,
-                color: i===0?"#f97316":"#e8dcc8"}}>{m.overall}</div>
               <div style={{textAlign:"right"}}>
-                {hasKey ? (
-                  <button style={{...S.btn("primary"),fontSize:10}} onClick={()=>setTestModal(m)} className="hov-btn">▶ Test</button>
-                ) : (
-                  <span style={{fontSize:11,color:"#6b5c42"}}>No key</span>
-                )}
+                <span style={{fontWeight:700,fontSize:15,color:i===0?C.orange:C.text}}>{m.overall}</span>
+                {!!apiKeys[m.id]&&<button style={{...btn("dim"),fontSize:10,padding:"2px 7px",marginLeft:6}} onClick={()=>setTestModal(m)} className="hov">Test</button>}
               </div>
             </div>
           );
         })}
       </div>
-
-      {/* Benchmark info */}
-      <div style={{...S.grid3, marginTop:24}}>
-        {[
-          {name:"MMLU",desc:"57-subject multiple choice test measuring broad knowledge across STEM, humanities, and more.",source:"papers.nips.cc"},
-          {name:"HumanEval",desc:"164 hand-crafted Python programming problems evaluating code synthesis from docstrings.",source:"github.com/openai"},
-          {name:"MT-Bench",desc:"Multi-turn conversation benchmark with GPT-4 as judge, scored 0–10.",source:"lmsys.org"},
-        ].map(b => (
-          <div key={b.name} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:16}}>
-            <div style={{fontFamily:"Georgia,serif",fontWeight:700,color:"#f97316",marginBottom:6}}>{b.name}</div>
-            <div style={{color:"#8a7a62",fontSize:12,lineHeight:1.6}}>{b.desc}</div>
-            <div style={{color:"#6b5c42",fontSize:10,marginTop:8}}>Source: {b.source}</div>
-          </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))",gap:9,marginTop:18}}>
+        {[{n:"MMLU",d:"57-subject knowledge test. Broad general intelligence.",s:"Hendrycks et al., 2020"},{n:"HumanEval",d:"164 Python coding problems from docstrings.",s:"Chen et al., OpenAI"},{n:"MATH-500",d:"500 competition math problems. Measures reasoning.",s:"Hendrycks et al."},{n:"MT-Bench",d:"Multi-turn chat quality judged by GPT-4. 0–10.",s:"LMSYS, 2023"}].map(b=>(
+          <div key={b.n} style={{...card,padding:13}}><div style={{fontWeight:700,color:C.orange,marginBottom:4,fontSize:13}}>{b.n}</div><div style={{color:C.muted,fontSize:12,lineHeight:1.6}}>{b.d}</div><div style={{color:C.faint,fontSize:10.5,marginTop:5}}>Source: {b.s}</div></div>
         ))}
       </div>
     </div>
   );
 }
 
-// ══ PLAYGROUND PAGE ═══════════════════════════════════════════
-function PlaygroundPage({ models, apiKeys, logUsage }) {
-  const [selectedId, setSelectedId] = useState("claude");
-  const [prompt, setPrompt] = useState("");
-  const [sysPrompt, setSysPrompt] = useState("You are a helpful assistant.");
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [temp, setTemp] = useState(0.7);
-  const [showConfig, setShowConfig] = useState(false);
-  const endRef = useRef(null);
+function PlaygroundPage({models,apiKeys,addLog}) {
+  const [selId,setSelId]=useState("claude");
+  const [prompt,setPrompt]=useState("");
+  const [sys,setSys]=useState("You are a helpful assistant.");
+  const [msgs,setMsgs]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [cfg,setCfg]=useState(false);
+  const endRef=useRef(null);
+  const model=models.find(m=>m.id===selId);
+  const hasKey=!!apiKeys[selId];
+  useEffect(()=>endRef.current?.scrollIntoView({behavior:"smooth"}),[msgs]);
 
-  const model = models.find(m=>m.id===selectedId);
-  const hasKey = !!apiKeys[selectedId];
-
-  useEffect(() => { endRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages]);
-
-  const send = async () => {
-    if (!prompt.trim() || loading || !hasKey) return;
-    const userMsg = prompt.trim();
-    setPrompt("");
-    setMessages(p => [...p, {role:"user", content:userMsg}]);
-    setLoading(true);
-    try {
-      const resp = await model.callFn(apiKeys[selectedId], userMsg);
-      setMessages(p => [...p, {role:"assistant", content:resp, modelId:selectedId}]);
-      logUsage(selectedId, userMsg, true, Math.floor(resp.length/4));
-      toastFn?.(`Response from ${model.name}`, "success");
-    } catch(e) {
-      setMessages(p => [...p, {role:"error", content:`Error: ${e.message}`}]);
-      logUsage(selectedId, userMsg, false, 0);
-      toastFn?.(e.message, "error");
-    }
+  const send=async()=>{
+    if(!prompt.trim()||loading||!hasKey)return;
+    const txt=prompt.trim();setPrompt("");
+    setMsgs(p=>[...p,{role:"user",content:txt}]);setLoading(true);
+    try{
+      const resp=await model.callFn(apiKeys[selId],txt);
+      setMsgs(p=>[...p,{role:"assistant",content:resp,mid:selId}]);
+      addLog(selId,txt,true,Math.floor(resp.length/4));toastFn?.(`${model.name} responded`);
+    }catch(e){setMsgs(p=>[...p,{role:"err",content:`Error: ${e.message}`}]);addLog(selId,txt,false,0);toastFn?.(e.message,"err");}
     setLoading(false);
   };
 
   return (
-    <div style={{...S.main, display:"grid", gridTemplateColumns:"260px 1fr", gap:20, height:"calc(100vh - 100px)"}} className="page-enter">
-      {/* Sidebar */}
-      <div style={{display:"flex",flexDirection:"column",gap:12,overflow:"auto"}}>
-        <div style={S.sectionTitle}>Playground</div>
-        <div style={{color:"#6b5c42",fontSize:12,marginBottom:4}}>Select Model</div>
-        {models.map(m => {
-          const hk = !!apiKeys[m.id];
-          return (
-            <div key={m.id} style={{
-              background: selectedId===m.id ? "rgba(249,115,22,0.1)" : "#120e08",
-              border: `1px solid ${selectedId===m.id?"#f97316":"#2a1f0e"}`,
-              borderRadius:8, padding:"10px 14px", cursor:"pointer",
-              transition:"all 0.15s"
-            }} onClick={() => setSelectedId(m.id)}>
-              <div style={{...S.flex(8,"center","space-between")}}>
-                <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:"#f4e4c4"}}>{m.name}</div>
-                <span style={{fontSize:10,color:hk?"#22c55e":"#6b5c42"}}>{hk?"●":"○"}</span>
-              </div>
-              <div style={{fontSize:11,color:"#6b5c42",marginTop:2}}>{m.org} · {m.context}</div>
-            </div>
-          );
-        })}
-
-        <div style={{marginTop:8, borderTop:"1px solid #1e1508", paddingTop:12}}>
-          <button style={{...S.btn("ghost"),width:"100%",justifyContent:"center",fontSize:11}}
-            onClick={()=>setShowConfig(!showConfig)} className="hov-btn">
-            {showConfig?"▲ Hide Config":"▼ Config"}
-          </button>
-          {showConfig && (
-            <div style={{marginTop:12, display:"flex", flexDirection:"column", gap:10}}>
-              <div>
-                <div style={{fontSize:11,color:"#6b5c42",marginBottom:4}}>SYSTEM PROMPT</div>
-                <textarea value={sysPrompt} onChange={e=>setSysPrompt(e.target.value)}
-                  style={{...S.input, height:80, resize:"vertical", fontSize:11}} />
-              </div>
-              <div>
-                <div style={{...S.flex(0,"center","space-between"), marginBottom:4}}>
-                  <span style={{fontSize:11,color:"#6b5c42"}}>TEMPERATURE</span>
-                  <span style={{fontSize:11,color:"#f97316"}}>{temp}</span>
-                </div>
-                <input type="range" min={0} max={2} step={0.1} value={temp}
-                  onChange={e=>setTemp(parseFloat(e.target.value))}
-                  style={{width:"100%",accentColor:"#f97316"}} />
-              </div>
-            </div>
-          )}
+    <div style={{...main,display:"grid",gridTemplateColumns:"230px 1fr",gap:14,height:"calc(100vh - 100px)"}} className="fade">
+      <div style={{display:"flex",flexDirection:"column",gap:9,overflow:"auto"}}>
+        <div style={{fontWeight:700,fontSize:16,color:C.text,marginBottom:3}}>Playground</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:4}}>SELECT MODEL</div>
+        {models.map(m=>{const hk=!!apiKeys[m.id];return(
+          <div key={m.id} style={{...card,padding:"9px 11px",cursor:"pointer",borderColor:selId===m.id?C.orange:C.border,background:selId===m.id?C.orangeDim:C.surface}} onClick={()=>setSelId(m.id)}>
+            <div style={fl(7)}><span style={{color:C.orange}}>{m.icon}</span><div style={{flex:1,minWidth:0}}><div style={{fontWeight:600,fontSize:12.5,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div><div style={{fontSize:10.5,color:C.muted}}>{m.org}</div></div><span style={{color:hk?C.green:C.faint,fontSize:11}}>{hk?"●":"○"}</span></div>
+          </div>
+        );})}
+        <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9,marginTop:3}}>
+          <button style={{...btn("line"),width:"100%",justifyContent:"center",fontSize:11.5}} onClick={()=>setCfg(!cfg)} className="hov">{cfg?"▲ Hide config":"▼ Config"}</button>
+          {cfg&&<div style={{marginTop:9}}><div style={{fontSize:11,color:C.muted,marginBottom:4}}>SYSTEM PROMPT</div><textarea value={sys} onChange={e=>setSys(e.target.value)} style={{...inp,height:68,resize:"vertical",fontSize:11}}/></div>}
         </div>
       </div>
-
-      {/* Chat */}
-      <div style={{display:"flex",flexDirection:"column",background:"#120e08",
-        border:"1px solid #2a1f0e",borderRadius:12,overflow:"hidden"}}>
-        {/* Header */}
-        <div style={{padding:"14px 20px",borderBottom:"1px solid #1e1508",
-          ...S.flex(10,"center","space-between")}}>
-          <div style={S.flex(10)}>
-            <div style={{width:32,height:32,background:"rgba(249,115,22,0.08)",border:"1px solid #2a1f0e",
-              borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:16,color:"#f97316"}}>{model.icon}</div>
-            <div>
-              <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{model.name}</div>
-              <div style={{fontSize:11,color:"#6b5c42"}}>{model.org} · {model.context} context</div>
-            </div>
-          </div>
-          <div style={S.flex(8)}>
-            {!hasKey && (
-              <span style={{fontSize:11,color:"#f97316",border:"1px solid rgba(249,115,22,0.3)",
-                padding:"3px 10px",borderRadius:4}}>⚠ No API key</span>
-            )}
-            <button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>setMessages([])} className="hov-btn">
-              ↺ Clear
-            </button>
-          </div>
+      <div style={{display:"flex",flexDirection:"column",...card,overflow:"hidden"}}>
+        <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,...fl(0,"center","space-between")}}>
+          <div style={fl(8)}><span style={{color:C.orange,fontSize:18}}>{model.icon}</span><div><div style={{fontWeight:600,fontSize:13,color:C.text}}>{model.name}</div><div style={{fontSize:11,color:C.muted}}>{model.context} context</div></div></div>
+          <div style={fl(7)}>{!hasKey&&<span style={{fontSize:11,color:C.orange,border:"1px solid rgba(249,115,22,0.3)",padding:"2px 8px",borderRadius:4}}>⚠ No key</span>}<button style={btn("line")} onClick={()=>setMsgs([])} className="hov">↺ Clear</button></div>
         </div>
-
-        {/* Messages */}
-        <div style={{flex:1,overflow:"auto",padding:20,display:"flex",flexDirection:"column",gap:16}}>
-          {messages.length === 0 && (
-            <div style={{textAlign:"center",padding:60,color:"#6b5c42"}}>
-              <ClawMark size={40} color="#2a1f0e" />
-              <div style={{marginTop:12,fontSize:13}}>Start a conversation with {model.name}</div>
-              {!hasKey && (
-                <div style={{marginTop:8,fontSize:12,color:"#f97316"}}>
-                  Add an API key in Dashboard to enable testing
-                </div>
-              )}
-            </div>
-          )}
-          {messages.map((msg, i) => (
-            <div key={i} style={{
-              display:"flex", justifyContent: msg.role==="user" ? "flex-end" : "flex-start"
-            }}>
-              <div style={{
-                maxWidth:"75%",
-                background: msg.role==="user" ? "rgba(249,115,22,0.12)" :
-                            msg.role==="error" ? "rgba(239,68,68,0.1)" : "#1a1208",
-                border: `1px solid ${msg.role==="user"?"rgba(249,115,22,0.3)":msg.role==="error"?"rgba(239,68,68,0.3)":"#2a1f0e"}`,
-                borderRadius: msg.role==="user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
-                padding:"12px 16px",
-                color: msg.role==="error" ? "#ef4444" : "#e8dcc8",
-                fontSize:13, lineHeight:1.7,
-                fontFamily:"'Courier New',monospace", whiteSpace:"pre-wrap"
-              }}>
-                {msg.role==="assistant" && (
-                  <div style={{fontSize:10,color:"#6b5c42",marginBottom:6,letterSpacing:"0.06em"}}>
-                    {models.find(m=>m.id===msg.modelId)?.name || "Assistant"}
-                  </div>
-                )}
+        <div style={{flex:1,overflow:"auto",padding:16,display:"flex",flexDirection:"column",gap:13}}>
+          {msgs.length===0&&<div style={{textAlign:"center",padding:44,color:C.muted}}><div style={{fontSize:26,marginBottom:9}}>◈</div><div style={{fontSize:13}}>Send a message to {model.name}</div>{!hasKey&&<div style={{fontSize:12,color:C.orange,marginTop:5}}>Add an API key in Dashboard first</div>}</div>}
+          {msgs.map((msg,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start"}}>
+              <div style={{maxWidth:"78%",background:msg.role==="user"?C.orangeDim:msg.role==="err"?"rgba(239,68,68,0.08)":C.surface2,border:`1px solid ${msg.role==="user"?"rgba(249,115,22,0.25)":msg.role==="err"?"rgba(239,68,68,0.25)":C.border}`,borderRadius:msg.role==="user"?"10px 10px 2px 10px":"10px 10px 10px 2px",padding:"10px 13px",fontSize:13,lineHeight:1.7,color:msg.role==="err"?C.red:C.text,whiteSpace:"pre-wrap"}}>
+                {msg.role==="assistant"&&<div style={{fontSize:10.5,color:C.muted,marginBottom:4}}>{models.find(x=>x.id===msg.mid)?.name}</div>}
                 {msg.content}
               </div>
             </div>
           ))}
-          {loading && (
-            <div style={{...S.flex(8), color:"#f97316", fontSize:12}}>
-              <span style={{animation:"pulse 1s infinite"}}>●</span>
-              <span style={{animation:"pulse 1s infinite 0.2s"}}>●</span>
-              <span style={{animation:"pulse 1s infinite 0.4s"}}>●</span>
-              <span style={{marginLeft:8,color:"#6b5c42"}}>Generating…</span>
-            </div>
-          )}
-          <div ref={endRef} />
+          {loading&&<div style={{...fl(5),color:C.orange,fontSize:12}}><span>●</span><span>●</span><span>●</span><span style={{marginLeft:5,color:C.muted}}>Generating…</span></div>}
+          <div ref={endRef}/>
         </div>
-
-        {/* Input */}
-        <div style={{padding:"14px 20px",borderTop:"1px solid #1e1508"}}>
-          <div style={S.flex(8)}>
-            <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
-              onKeyDown={e => { if(e.key==="Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder={hasKey ? `Message ${model.name}… (Enter to send, Shift+Enter for newline)` : "Add an API key to start chatting…"}
-              disabled={!hasKey || loading}
-              style={{...S.input, height:50, resize:"none", flex:1, fontSize:13}} />
-            <button style={{...S.btn("primary"), height:50, padding:"0 20px"}}
-              onClick={send} disabled={!hasKey||loading||!prompt.trim()} className="hov-btn">
-              ↑ Send
-            </button>
-          </div>
+        <div style={{padding:"11px 16px",borderTop:`1px solid ${C.border}`,...fl(7)}}>
+          <textarea value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}} placeholder={hasKey?`Message ${model.name}…`:"Add API key to start"} disabled={!hasKey||loading} style={{...inp,height:44,resize:"none",flex:1,fontSize:13}}/>
+          <button style={{...btn("fill"),height:44,padding:"0 16px"}} onClick={send} disabled={!hasKey||loading||!prompt.trim()} className="hov">↑</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ══ COMPARE PAGE ══════════════════════════════════════════════
-function ComparePage({ compareList, models, apiKeys, setCompareList, toggleCompare }) {
-  const compared = compareList.map(id => models.find(m=>m.id===id)).filter(Boolean);
-  const all = models;
-
-  if (compareList.length === 0) return (
-    <div style={{...S.main, textAlign:"center", padding:"80px 0"}} className="page-enter">
-      <ClawMark size={48} color="#2a1f0e" />
-      <div style={{fontFamily:"Georgia,serif",fontSize:22,color:"#6b5c42",marginTop:16}}>No models selected</div>
-      <div style={{color:"#6b5c42",fontSize:13,marginTop:8}}>Go to Explore and click ⊞ on up to 3 models to compare them.</div>
-    </div>
-  );
-
-  const metrics = [
-    {label:"Parameters", key:"params"},
-    {label:"Context Window", key:"context"},
-    {label:"Cost", key:"cost"},
-    {label:"MMLU (%)", key:"mmlu"},
-    {label:"HumanEval (%)", key:"humaneval"},
-    {label:"MT-Bench (/10)", key:"mtbench"},
-    {label:"Type", key:"type"},
-    {label:"Free Tier", fn: m => m.free ? "✓ Yes" : "✗ No"},
-    {label:"Vision", fn: m => m.tags.includes("vision") ? "✓ Yes" : "✗ No"},
-    {label:"Code", fn: m => m.tags.includes("code") ? "✓ Yes" : "✗ No"},
-  ];
-
+function ComparePage({compareList,models,setCompareList}) {
+  const compared=compareList.map(id=>models.find(m=>m.id===id)).filter(Boolean);
+  if(compareList.length===0)return(<div style={{...main,textAlign:"center",padding:"68px 0"}} className="fade"><div style={{fontSize:28,marginBottom:10,color:C.faint}}>⊞</div><div style={{color:C.muted,fontSize:14}}>No models selected. Click ⊞ on up to 3 cards in Explore.</div></div>);
+  const metrics=[{l:"Parameters",k:"params"},{l:"Context",k:"context"},{l:"Cost",k:"cost"},{l:"MMLU (%)",k:"mmlu"},{l:"HumanEval (%)",k:"humaneval"},{l:"MATH-500 (%)",k:"math500"},{l:"MT-Bench (/10)",k:"mtbench"},{l:"Tier",k:"tier"},{l:"Type",fn:m=>m.type},{l:"Free Tier",fn:m=>m.free?"Yes":"No"},{l:"Local (Ollama)?",fn:m=>m.ollamaId?"Yes — "+m.ollamaId:"No"},{l:"Vision",fn:m=>m.tags.includes("vision")?"Yes":"No"}];
   return (
-    <div style={S.main} className="page-enter">
-      <div style={{...S.flex(0,"center","space-between"), marginBottom:28}}>
-        <div>
-          <div style={S.sectionTitle}>Side-by-Side Compare</div>
-          <div style={S.muted}>Comparing {compared.length} models</div>
-        </div>
-        <button style={S.btn("ghost")} onClick={()=>setCompareList([])} className="hov-btn">
-          ✕ Clear All
-        </button>
+    <div style={main} className="fade">
+      <div style={{...fl(0,"center","space-between"),marginBottom:20}}>
+        <div><div style={{fontWeight:700,fontSize:20,color:C.text}}>Compare</div><div style={{color:C.muted,fontSize:13}}>{compared.length} models</div></div>
+        <button style={btn("line")} onClick={()=>setCompareList([])} className="hov">Clear all</button>
       </div>
-
-      {/* Add more */}
-      {compareList.length < 3 && (
-        <div style={{background:"rgba(249,115,22,0.04)",border:"1px dashed #2a1f0e",borderRadius:10,
-          padding:16, marginBottom:20}}>
-          <div style={{fontSize:12,color:"#6b5c42",marginBottom:10}}>Add another model to compare:</div>
-          <div style={S.flex(8,undefined,undefined,{flexWrap:"wrap"})}>
-            {all.filter(m=>!compareList.includes(m.id)).map(m => (
-              <button key={m.id} style={{...S.btn("ghost"),fontSize:11}} onClick={()=>toggleCompare(m.id)} className="hov-btn">
-                + {m.name}
-              </button>
+      {compareList.length<3&&(
+        <div style={{...card,padding:13,borderStyle:"dashed",marginBottom:14}}>
+          <div style={{fontSize:12,color:C.muted,marginBottom:7}}>Add another:</div>
+          <div style={fl(5,undefined,undefined,{flexWrap:"wrap"})}>
+            {models.filter(m=>!compareList.includes(m.id)).map(m=>(
+              <button key={m.id} style={{...btn("line"),fontSize:11}} onClick={()=>setCompareList(p=>[...p,m.id])} className="hov">+ {m.name}</button>
             ))}
           </div>
         </div>
       )}
-
-      {/* Table */}
-      <div style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:12,overflow:"hidden"}}>
-        {/* Header */}
-        <div style={{display:"grid",gridTemplateColumns:`180px repeat(${compared.length},1fr)`,
-          background:"#1a1208",borderBottom:"1px solid #2a1f0e"}}>
-          <div style={{padding:"14px 20px",fontSize:11,color:"#6b5c42",letterSpacing:"0.06em"}}>METRIC</div>
-          {compared.map(m => (
-            <div key={m.id} style={{padding:"14px 20px",borderLeft:"1px solid #2a1f0e"}}>
-              <div style={S.flex(8)}>
-                <span style={{color:"#f97316",fontSize:18}}>{m.icon}</span>
-                <div>
-                  <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:"#f4e4c4"}}>{m.name}</div>
-                  <div style={{fontSize:11,color:"#6b5c42"}}>{m.org}</div>
-                </div>
-                <button style={{marginLeft:"auto",background:"none",border:"none",
-                  color:"#6b5c42",cursor:"pointer",fontSize:14}} onClick={()=>toggleCompare(m.id)}>✕</button>
-              </div>
-              <div style={{...S.flex(4), marginTop:8, flexWrap:"wrap"}}>
-                <span style={S.badge(m.type)}>{m.type==="open"?"OPEN":"CLOSED"}</span>
-                {m.free && <span style={S.badge("free")}>FREE</span>}
-              </div>
+      <div style={{...card,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:`155px repeat(${compared.length},1fr)`,background:C.surface2,borderBottom:`1px solid ${C.border}`}}>
+          <div style={{padding:"11px 15px",fontSize:10.5,color:C.muted}}>METRIC</div>
+          {compared.map(m=>(
+            <div key={m.id} style={{padding:"11px 15px",borderLeft:`1px solid ${C.border}`}}>
+              <div style={fl(7)}><span style={{color:C.orange}}>{m.icon}</span><div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:C.text}}>{m.name}</div><div style={{fontSize:10.5,color:C.muted}}>{m.org}</div></div><button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:13}} onClick={()=>setCompareList(p=>p.filter(x=>x!==m.id))}>✕</button></div>
             </div>
           ))}
         </div>
-
-        {metrics.map((mt, ri) => {
-          const vals = compared.map(m => mt.fn ? mt.fn(m) : m[mt.key]);
-          const numVals = vals.map(v=>parseFloat(v)).filter(v=>!isNaN(v));
-          const maxVal = numVals.length > 0 ? Math.max(...numVals) : null;
-
+        {metrics.map((mt,ri)=>{
+          const vals=compared.map(m=>mt.fn?mt.fn(m):m[mt.k]);
+          const nums=vals.map(v=>parseFloat(v)).filter(v=>!isNaN(v));
+          const best=nums.length>0?Math.max(...nums):null;
           return (
-            <div key={mt.label} style={{display:"grid",
-              gridTemplateColumns:`180px repeat(${compared.length},1fr)`,
-              borderBottom:"1px solid #1a1208",
-              background: ri%2===0 ? "transparent" : "rgba(255,255,255,0.01)"}}>
-              <div style={{padding:"12px 20px",fontSize:12,color:"#6b5c42",letterSpacing:"0.04em",
-                display:"flex",alignItems:"center"}}>{mt.label}</div>
-              {compared.map(m => {
-                const val = mt.fn ? mt.fn(m) : m[mt.key];
-                const numVal = parseFloat(val);
-                const isBest = maxVal !== null && numVal === maxVal;
-                return (
-                  <div key={m.id} style={{padding:"12px 20px",borderLeft:"1px solid #1e1508",
-                    display:"flex",alignItems:"center"}}>
-                    <span style={{
-                      fontFamily:"Georgia,serif",fontWeight:isBest?700:400,
-                      fontSize:13, color: isBest?"#f97316":"#e8dcc8"
-                    }}>
-                      {isBest && "★ "}{val}
-                    </span>
-                  </div>
-                );
-              })}
+            <div key={mt.l} style={{display:"grid",gridTemplateColumns:`155px repeat(${compared.length},1fr)`,borderBottom:`1px solid ${C.faint}`,background:ri%2===0?"transparent":"rgba(255,255,255,0.01)"}}>
+              <div style={{padding:"10px 15px",fontSize:12,color:C.muted,display:"flex",alignItems:"center"}}>{mt.l}</div>
+              {compared.map(m=>{const val=mt.fn?mt.fn(m):m[mt.k];const isBest=best!==null&&parseFloat(val)===best;return(<div key={m.id} style={{padding:"10px 15px",borderLeft:`1px solid ${C.faint}`,display:"flex",alignItems:"center"}}><span style={{fontSize:13,fontWeight:isBest?700:400,color:isBest?C.orange:C.text}}>{isBest&&"↑ "}{val}</span></div>);})}
             </div>
           );
         })}
@@ -976,743 +744,190 @@ function ComparePage({ compareList, models, apiKeys, setCompareList, toggleCompa
   );
 }
 
-// ══ DASHBOARD PAGE ════════════════════════════════════════════
-function DashboardPage({ apiKeys, setApiKeys, usageLogs, savedModels, models, setPage }) {
-  const [editKey, setEditKey] = useState({});
-  const [showKey, setShowKey] = useState({});
-  const [activeTab, setActiveTab] = useState("keys");
+function HardwarePage({models}) {
+  const [step,setStep]=useState(1);
+  const [sel,setSel]=useState(null);
+  const [raw,setRaw]=useState("");
+  const [hw,setHw]=useState(null);
+  const [result,setResult]=useState(null);
+  const openModels=models.filter(m=>m.type==="open");
 
-  const saveKey = (modelId) => {
-    const val = editKey[modelId]?.trim();
-    if (!val) return;
-    setApiKeys(p => ({...p, [modelId]: val}));
-    setEditKey(p => ({...p, [modelId]: ""}));
-    toastFn?.(`Key saved for ${models.find(m=>m.id===modelId)?.name}`);
+  const parse=(text)=>{
+    const get=(...keys)=>{for(const k of keys){const r=new RegExp(k+"[\\s\\t]+(.+)","i");const m=text.match(r);if(m)return m[1].trim();}return "";};
+    const proc=get("Processor");
+    const ramRaw=get("Installed RAM","RAM");
+    const gpuRaw=get("Graphics Card","Display adapter","GPU","Display");
+    const storageRaw=get("Storage","Hard disk");
+    const sys=get("System Type");
+    const ramM=ramRaw.match(/([\d.]+)\s*GB/i);
+    const ramGB=ramM?parseFloat(ramM[1]):0;
+    const vramMs=[...gpuRaw.matchAll(/\((\d+)\s*GB\)/gi)];
+    const vramGB=vramMs.length>0?Math.max(...vramMs.map(m=>parseInt(m[1]))):0;
+    const cpuT=proc.toLowerCase();
+    const cpuScore=cpuT.includes("i9")||cpuT.includes("ryzen 9")||cpuT.includes("xeon")||cpuT.includes("threadripper")?95:cpuT.includes("i7")||cpuT.includes("ryzen 7")?80:cpuT.includes("i5")||cpuT.includes("ryzen 5")?65:cpuT.includes("i3")||cpuT.includes("ryzen 3")?45:cpuT.includes("celeron")||cpuT.includes("pentium")?20:50;
+    const gpuT=gpuRaw.toLowerCase();
+    const gpuTier=gpuT.includes("4090")||gpuT.includes("4080")||gpuT.includes("3090")?"flagship":gpuT.includes("4070")||gpuT.includes("3080")||gpuT.includes("3070")?"high":gpuT.includes("4060")||gpuT.includes("3060")||gpuT.includes("2080")||gpuT.includes("6800")||gpuT.includes("6700")?"mid":gpuT.includes("1080")||gpuT.includes("2060")||gpuT.includes("3050")||gpuT.includes("6600")||gpuT.includes("rx 580")||gpuT.includes("1070")||gpuT.includes("1060")?"low-mid":gpuT.includes("gt ")||gpuT.includes("710")||gpuT.includes("730")||gpuT.includes("intel")||gpuT.includes("uhd")||gpuT.includes("iris")||gpuT.includes("integrated")?"integrated":"unknown";
+    const isHDD=storageRaw.toLowerCase().includes("hdd")||/hitachi|toshiba mq|seagate barracuda/i.test(storageRaw);
+    const isSSD=storageRaw.toLowerCase().includes("ssd")||storageRaw.toLowerCase().includes("nvme");
+    return {proc:proc||"Unknown",ramGB,vramGB,gpuRaw:gpuRaw||"Unknown",storageRaw:storageRaw||"Unknown",isHDD,isSSD,cpuScore,gpuTier,is64:sys.includes("64")};
   };
 
-  const removeKey = (modelId) => {
-    setApiKeys(p => { const n={...p}; delete n[modelId]; return n; });
-    toastFn?.(`Key removed`, "error");
-  };
+  const analyze=()=>{
+    if(!raw.trim()){toastFn?.("Paste your system info first","err");return;}
+    if(!sel){toastFn?.("Pick a model first","err");return;}
+    const parsed=parse(raw);setHw(parsed);
+    const m=sel;
+    const q4ram=m.ramQ4gb||999;
+    const q4vram=m.vramQ4gb||999;
+    const usableRam=Math.max(0,parsed.ramGB-2);
+    const usableVram=Math.max(0,parsed.vramGB-0.5);
+    const isGpuReal=parsed.gpuTier!=="integrated"&&parsed.gpuTier!=="unknown";
+    let verdict,vColor,vIcon,summary,steps=[],warns=[],alts=[];
 
-  const keyCount = Object.keys(apiKeys).length;
-  const totalCalls = usageLogs.length;
-  const successCalls = usageLogs.filter(l=>l.success).length;
-  const totalTokens = usageLogs.reduce((a,l)=>a+(l.tokens||0),0);
-
-  // Usage by model
-  const byModel = models.map(m => ({
-    ...m,
-    calls: usageLogs.filter(l=>l.modelId===m.id).length,
-    success: usageLogs.filter(l=>l.modelId===m.id && l.success).length,
-    tokens: usageLogs.filter(l=>l.modelId===m.id).reduce((a,l)=>a+(l.tokens||0),0),
-  })).filter(m=>m.calls>0).sort((a,b)=>b.calls-a.calls);
-
-  const tabs = [
-    {id:"keys", label:"API Keys"},
-    {id:"usage", label:"Usage Analytics"},
-    {id:"logs", label:"Call Logs"},
-    {id:"saved", label:"Saved Models"},
-  ];
-
-  return (
-    <div style={S.main} className="page-enter">
-      <div style={{marginBottom:28}}>
-        <div style={S.sectionTitle}>User Dashboard</div>
-        <div style={S.muted}>Manage your API keys, track usage, and review history</div>
-      </div>
-
-      {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:28}}>
-        {[
-          {n:keyCount,l:"API Keys Stored",icon:"🔑",c:"#f97316"},
-          {n:totalCalls,l:"Total API Calls",icon:"⚡",c:"#22c55e"},
-          {n:`${successCalls}/${totalCalls}`,l:"Success Rate",icon:"✓",c:"#eab308"},
-          {n:totalTokens.toLocaleString(),l:"Tokens Used",icon:"◈",c:"#8b5cf6"},
-        ].map(s => (
-          <div key={s.l} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:"16px 20px"}}>
-            <div style={{...S.flex(8,"center","space-between"),marginBottom:6}}>
-              <span style={{fontSize:20}}>{s.icon}</span>
-              <span style={{fontSize:10,color:"#6b5c42",letterSpacing:"0.06em"}}>{s.l}</span>
-            </div>
-            <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:24,color:s.c}}>{s.n}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div style={{...S.flex(4), marginBottom:20, borderBottom:"1px solid #1e1508", paddingBottom:0}}>
-        {tabs.map(t => (
-          <button key={t.id} style={{
-            ...S.btn("ghost"), borderRadius:"6px 6px 0 0",
-            borderBottom:"none", marginBottom:-1,
-            borderColor: activeTab===t.id ? "#f97316" : "transparent",
-            color: activeTab===t.id ? "#f97316" : "#6b5c42",
-            background: activeTab===t.id ? "rgba(249,115,22,0.06)" : "transparent"
-          }} onClick={()=>setActiveTab(t.id)} className="hov-btn">{t.label}</button>
-        ))}
-      </div>
-
-      {/* API KEYS */}
-      {activeTab==="keys" && (
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.2)",
-            borderRadius:8,padding:"10px 16px",fontSize:12,color:"#8a7a62",lineHeight:1.6}}>
-            🔐 Keys are stored locally in your browser only. They are never sent to OpenClaw servers.
-          </div>
-          {models.map(m => {
-            const hasKey = !!apiKeys[m.id];
-            return (
-              <div key={m.id} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:"16px 20px"}}>
-                <div style={{...S.flex(12,"flex-start","space-between"), flexWrap:"wrap", gap:12}}>
-                  <div style={S.flex(10)}>
-                    <div style={{width:36,height:36,background:"rgba(249,115,22,0.08)",border:"1px solid #2a1f0e",
-                      borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",
-                      fontSize:16,color:"#f97316"}}>{m.icon}</div>
-                    <div>
-                      <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{m.name}</div>
-                      <div style={{fontSize:11,color:"#6b5c42"}}>{m.org} · env: <span style={{color:"#f97316"}}>{m.envKey}</span></div>
-                    </div>
-                  </div>
-                  <div style={{...S.flex(8), flex:1, minWidth:280}}>
-                    {hasKey ? (
-                      <>
-                        <input
-                          type={showKey[m.id]?"text":"password"}
-                          value={showKey[m.id] ? apiKeys[m.id] : "•".repeat(Math.min(apiKeys[m.id].length, 32))}
-                          readOnly
-                          style={{...S.input, flex:1, fontSize:12, color:"#22c55e"}} />
-                        <button style={{...S.btn("ghost"),fontSize:11}}
-                          onClick={()=>setShowKey(p=>({...p,[m.id]:!p[m.id]}))} className="hov-btn">
-                          {showKey[m.id]?"Hide":"Show"}
-                        </button>
-                        <button style={{...S.btn("ghost"),fontSize:11,borderColor:"#ef4444",color:"#ef4444"}}
-                          onClick={()=>removeKey(m.id)} className="hov-btn">Remove</button>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          type="password"
-                          placeholder={`Paste ${m.envKey} here…`}
-                          value={editKey[m.id]||""}
-                          onChange={e=>setEditKey(p=>({...p,[m.id]:e.target.value}))}
-                          onKeyDown={e=>e.key==="Enter"&&saveKey(m.id)}
-                          style={{...S.input, flex:1, fontSize:12}} />
-                        <button style={S.btn("primary")} onClick={()=>saveKey(m.id)} className="hov-btn">
-                          Save Key
-                        </button>
-                        <a href={m.docsUrl} target="_blank" rel="noreferrer"
-                          style={{...S.btn("ghost"),textDecoration:"none",fontSize:11}}>Get Key ↗</a>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* USAGE ANALYTICS */}
-      {activeTab==="usage" && (
-        <div>
-          {byModel.length === 0 ? (
-            <div style={{textAlign:"center",padding:60,color:"#6b5c42"}}>
-              <ClawMark size={40} color="#2a1f0e" />
-              <div style={{marginTop:12,fontSize:14}}>No usage yet. Start testing models in Playground!</div>
-              <button style={{...S.btn("primary"),marginTop:16}} onClick={()=>setPage("playground")} className="hov-btn">
-                Go to Playground
-              </button>
-            </div>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              {byModel.map(m => (
-                <div key={m.id} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:"16px 20px"}}>
-                  <div style={{...S.flex(12,"center","space-between"),marginBottom:12}}>
-                    <div style={S.flex(10)}>
-                      <span style={{color:"#f97316",fontSize:18}}>{m.icon}</span>
-                      <div>
-                        <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{m.name}</div>
-                        <div style={{fontSize:11,color:"#6b5c42"}}>{m.org}</div>
-                      </div>
-                    </div>
-                    <div style={S.flex(20)}>
-                      <div style={{textAlign:"center"}}>
-                        <div style={{fontFamily:"Georgia,serif",fontSize:20,fontWeight:700,color:"#f97316"}}>{m.calls}</div>
-                        <div style={{fontSize:10,color:"#6b5c42"}}>CALLS</div>
-                      </div>
-                      <div style={{textAlign:"center"}}>
-                        <div style={{fontFamily:"Georgia,serif",fontSize:20,fontWeight:700,color:"#22c55e"}}>{m.success}</div>
-                        <div style={{fontSize:10,color:"#6b5c42"}}>SUCCESS</div>
-                      </div>
-                      <div style={{textAlign:"center"}}>
-                        <div style={{fontFamily:"Georgia,serif",fontSize:20,fontWeight:700,color:"#eab308"}}>{m.tokens.toLocaleString()}</div>
-                        <div style={{fontSize:10,color:"#6b5c42"}}>TOKENS</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{height:6,background:"#1a1208",borderRadius:3,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${(m.calls/totalCalls)*100}%`,
-                        background:"linear-gradient(90deg,#f97316,#fbbf24)",borderRadius:3}} />
-                    </div>
-                    <div style={{fontSize:10,color:"#6b5c42",marginTop:4}}>
-                      {((m.calls/totalCalls)*100).toFixed(0)}% of all calls
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* CALL LOGS */}
-      {activeTab==="logs" && (
-        <div>
-          {usageLogs.length === 0 ? (
-            <div style={{textAlign:"center",padding:60,color:"#6b5c42"}}>
-              <ClawMark size={40} color="#2a1f0e" />
-              <div style={{marginTop:12,fontSize:14}}>No logs yet.</div>
-            </div>
-          ) : (
-            <div style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:12,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"120px 1fr 80px 80px 100px",
-                padding:"10px 16px",background:"#1a1208",borderBottom:"1px solid #2a1f0e",
-                fontSize:10,color:"#6b5c42",letterSpacing:"0.06em"}}>
-                <div>TIME</div><div>PROMPT</div><div>MODEL</div><div>STATUS</div><div>TOKENS</div>
-              </div>
-              {usageLogs.slice(0,50).map(log => {
-                const m = models.find(x=>x.id===log.modelId);
-                return (
-                  <div key={log.id} style={{display:"grid",gridTemplateColumns:"120px 1fr 80px 80px 100px",
-                    padding:"10px 16px",borderBottom:"1px solid #1a1208",fontSize:12,alignItems:"center"}}>
-                    <div style={{color:"#6b5c42",fontSize:10}}>{new Date(log.ts).toLocaleTimeString()}</div>
-                    <div style={{color:"#8a7a62",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.prompt}…</div>
-                    <div style={{fontSize:11,color:"#f97316"}}>{m?.name?.split(" ")[0]||log.modelId}</div>
-                    <div style={{color:log.success?"#22c55e":"#ef4444",fontSize:11}}>{log.success?"✓ ok":"✕ err"}</div>
-                    <div style={{color:"#eab308",fontSize:11}}>{log.tokens} tok</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {usageLogs.length > 0 && (
-            <button style={{...S.btn("ghost"),marginTop:12,fontSize:11,borderColor:"#ef4444",color:"#ef4444"}}
-              onClick={()=>{
-                if(window.confirm("Clear all logs?")) {
-                  localStorage.setItem("oc_logs","[]");
-                  window.location.reload();
-                }
-              }} className="hov-btn">✕ Clear All Logs</button>
-          )}
-        </div>
-      )}
-
-      {/* SAVED */}
-      {activeTab==="saved" && (
-        <div style={S.grid2}>
-          {savedModels.length === 0 ? (
-            <div style={{gridColumn:"1/-1",textAlign:"center",padding:60,color:"#6b5c42"}}>
-              <ClawMark size={40} color="#2a1f0e" />
-              <div style={{marginTop:12,fontSize:14}}>No saved models yet. Star models in Explore!</div>
-              <button style={{...S.btn("primary"),marginTop:16}} onClick={()=>setPage("explore")} className="hov-btn">
-                Explore Models
-              </button>
-            </div>
-          ) : (
-            models.filter(m=>savedModels.includes(m.id)).map(m => (
-              <div key={m.id} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:16}}>
-                <div style={S.flex(10)}>
-                  <span style={{color:"#f97316",fontSize:20}}>{m.icon}</span>
-                  <div style={{flex:1}}>
-                    <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{m.name}</div>
-                    <div style={{fontSize:11,color:"#6b5c42"}}>{m.org} · {m.params}</div>
-                  </div>
-                  <span style={S.badge(m.type)}>{m.type==="open"?"OPEN":"CLOSED"}</span>
-                </div>
-                <div style={{color:"#8a7a62",fontSize:12,margin:"10px 0",lineHeight:1.6}}>{m.desc}</div>
-                <div style={{...S.flex(6,"center","space-between"),paddingTop:10,borderTop:"1px solid #1e1508"}}>
-                  <span style={{fontSize:11,color:"#6b5c42"}}>MMLU: <strong style={{color:"#e8dcc8"}}>{m.mmlu}%</strong> · HE: <strong style={{color:"#e8dcc8"}}>{m.humaneval}%</strong></span>
-                  <a href={m.docsUrl} target="_blank" rel="noreferrer" style={{...S.btn("ghost"),fontSize:11,textDecoration:"none"}}>Docs ↗</a>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══ TEST MODAL ════════════════════════════════════════════════
-function TestModal({ model:m, apiKeys, logUsage, onClose, onAddKey }) {
-  const [prompt, setPrompt] = useState("Say hello and describe yourself in 2 sentences.");
-  const [response, setResponse] = useState("");
-  const [loading, setLoading] = useState(false);
-  const hasKey = !!apiKeys[m.id];
-
-  const run = async () => {
-    if (!prompt.trim() || loading || !hasKey) return;
-    setLoading(true); setResponse("");
-    try {
-      const resp = await m.callFn(apiKeys[m.id], prompt);
-      setResponse(resp);
-      logUsage(m.id, prompt, true, Math.floor(resp.length/4));
-      toastFn?.("Response received!");
-    } catch(e) {
-      setResponse(`Error: ${e.message}`);
-      logUsage(m.id, prompt, false, 0);
-      toastFn?.(e.message, "error");
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:500,
-      display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
-      onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:14,
-        width:"100%",maxWidth:600,maxHeight:"80vh",overflow:"auto",padding:28}}>
-        <div style={{...S.flex(12,"center","space-between"),marginBottom:20}}>
-          <div style={S.flex(10)}>
-            <div style={{width:40,height:40,background:"rgba(249,115,22,0.08)",border:"1px solid #2a1f0e",
-              borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",
-              fontSize:18,color:"#f97316"}}>{m.icon}</div>
-            <div>
-              <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:16,color:"#f4e4c4"}}>Test {m.name}</div>
-              <div style={{fontSize:11,color:"#6b5c42"}}>{m.org} · {m.context}</div>
-            </div>
-          </div>
-          <button style={{background:"none",border:"none",color:"#6b5c42",cursor:"pointer",fontSize:20}}
-            onClick={onClose}>✕</button>
-        </div>
-
-        {!hasKey ? (
-          <div style={{textAlign:"center",padding:32}}>
-            <div style={{color:"#f97316",fontSize:14,marginBottom:16}}>⚠ No API key configured</div>
-            <button style={S.btn("primary")} onClick={onAddKey} className="hov-btn">+ Add API Key</button>
-          </div>
-        ) : (
-          <>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,color:"#6b5c42",marginBottom:6,letterSpacing:"0.05em"}}>PROMPT</div>
-              <textarea value={prompt} onChange={e=>setPrompt(e.target.value)}
-                style={{...S.input,height:80,resize:"vertical"}} />
-            </div>
-            <button style={{...S.btn("primary"),width:"100%",justifyContent:"center",marginBottom:16}}
-              onClick={run} disabled={loading} className="hov-btn">
-              {loading ? "⏳ Generating…" : "▶ Run Test"}
-            </button>
-            {response && (
-              <div style={{background:"#0d0a06",border:"1px solid #2a1f0e",borderRadius:8,
-                padding:16,fontSize:13,color:"#e8dcc8",lineHeight:1.7,
-                fontFamily:"'Courier New',monospace",whiteSpace:"pre-wrap",maxHeight:280,overflow:"auto"}}>
-                <div style={{fontSize:10,color:"#6b5c42",marginBottom:8,letterSpacing:"0.06em"}}>RESPONSE</div>
-                {response}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* API snippet */}
-        <div style={{marginTop:16,background:"#0d0a06",border:"1px solid #2a1f0e",borderRadius:8,padding:14}}>
-          <div style={{fontSize:10,color:"#6b5c42",marginBottom:6,letterSpacing:"0.06em"}}>QUICK SNIPPET</div>
-          <pre style={{fontSize:11,color:"#7c9af4",overflow:"auto",lineHeight:1.6}}>
-{`fetch("${m.endpoint}", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer " + YOUR_KEY
-  },
-  body: JSON.stringify({
-    model: "${m.model}",
-    messages: [{ role: "user", content: "..." }]
-  })
-})`}
-          </pre>
-          <button style={{...S.btn("ghost"),marginTop:8,fontSize:10}} onClick={() => {
-            navigator.clipboard.writeText(`fetch("${m.endpoint}", {\n  method: "POST",\n  headers: { "Authorization": "Bearer YOUR_KEY" },\n  body: JSON.stringify({ model: "${m.model}", messages: [{role:"user",content:"Hello"}] })\n})`).catch(()=>{});
-            toastFn?.("Snippet copied!");
-          }} className="hov-btn">Copy Snippet</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ══ HARDWARE BENCHMARK PAGE ═══════════════════════════════════
-function HardwarePage({ models }) {
-  const [step, setStep] = useState(1); // 1=pick model, 2=paste config, 3=results
-  const [selectedModel, setSelectedModel] = useState(null);
-  const [raw, setRaw] = useState("");
-  const [parsed, setParsed] = useState(null);
-  const [result, setResult] = useState(null);
-
-  const openModels = models.filter(m => m.type === "open");
-
-  const parseSpec = (text) => {
-    const get = (keys) => {
-      for (const k of keys) {
-        const re = new RegExp(k + "[\\s\\t]+(.+)", "i");
-        const match = text.match(re);
-        if (match) return match[1].trim();
-      }
-      return null;
-    };
-    const procRaw = get(["Processor"]) || "";
-    const ramRaw  = get(["Installed RAM","RAM"]) || "";
-    const gpuRaw  = get(["Graphics Card","GPU","Display adapter","Display"]) || "";
-    const storageRaw = get(["Storage","Hard disk","Disk"]) || "";
-    const sysType = get(["System Type"]) || "";
-
-    const ramMatch = ramRaw.match(/([\d.]+)\s*GB/i);
-    const ramGB = ramMatch ? parseFloat(ramMatch[1]) : 0;
-
-    const vramMatches = [...gpuRaw.matchAll(/\((\d+)\s*GB\)/gi)];
-    const vramGB = vramMatches.length > 0 ? Math.max(...vramMatches.map(m => parseInt(m[1]))) : 0;
-
-    const cpuScore = (() => {
-      const t = procRaw.toLowerCase();
-      if (t.includes("i9") || t.includes("ryzen 9") || t.includes("xeon") || t.includes("threadripper")) return 95;
-      if (t.includes("i7") || t.includes("ryzen 7")) return 80;
-      if (t.includes("i5") || t.includes("ryzen 5")) return 65;
-      if (t.includes("i3") || t.includes("ryzen 3")) return 45;
-      if (t.includes("celeron") || t.includes("pentium") || t.includes("atom")) return 20;
-      return 50;
-    })();
-
-    const gpuTier = (() => {
-      const t = gpuRaw.toLowerCase();
-      if (t.includes("4090")||t.includes("4080")||t.includes("3090")||t.includes("a100")||t.includes("h100")) return "flagship";
-      if (t.includes("4070")||t.includes("3080")||t.includes("3070")||t.includes("4060ti")) return "high";
-      if (t.includes("3060")||t.includes("2080")||t.includes("2070")||t.includes("6800")||t.includes("6700")) return "mid";
-      if (t.includes("1080")||t.includes("2060")||t.includes("3050")||t.includes("6600")||t.includes("rx 580")) return "low-mid";
-      if (t.includes("gt ")||t.includes("710")||t.includes("730")||t.includes("intel")||t.includes("integrated")||t.includes("uhd")||t.includes("iris")) return "integrated";
-      return "unknown";
-    })();
-
-    const isHDD = storageRaw.toLowerCase().includes("hdd") || storageRaw.toLowerCase().includes("hitachi") || storageRaw.toLowerCase().includes("toshiba mq");
-    const isSSD = storageRaw.toLowerCase().includes("ssd") || storageRaw.toLowerCase().includes("nvme") || storageRaw.toLowerCase().includes("samsung") && !isHDD;
-
-    return { processor:procRaw||"Unknown", ram:ramGB, ramRaw, vram:vramGB, gpuRaw:gpuRaw||"Unknown",
-      storage:storageRaw||"Unknown", isHDD, isSSD, cpuScore, gpuTier, is64bit:sysType.includes("64") };
-  };
-
-  const getParamsB = (m) => {
-    const t = (m.params||"").toLowerCase();
-    if (t.includes("671")) return 671;
-    if (t.includes("405")) return 405;
-    if (t.includes("72"))  return 72;
-    if (t.includes("70"))  return 70;
-    if (t.includes("34"))  return 34;
-    if (t.includes("27"))  return 27;
-    if (t.includes("14"))  return 14;
-    if (t.includes("8"))   return 8;
-    if (t.includes("7"))   return 7;
-    if (t.includes("3"))   return 3;
-    return 120;
-  };
-
-  const analyze = () => {
-    if (!raw.trim()) { toastFn?.("Paste your system info first", "error"); return; }
-    if (!selectedModel) { toastFn?.("Select a model first", "error"); return; }
-    const hw = parseSpec(raw);
-    const m = selectedModel;
-    const paramsB = getParamsB(m);
-
-    // Requirements
-    const vramQ4  = Math.ceil(paramsB * 0.55); // INT4 GPU
-    const ramCPU  = Math.ceil(paramsB * 0.65); // CPU RAM needed
-    const ramQ4   = Math.ceil(paramsB * 0.55); // Q4 CPU
-    const ramQ3   = Math.ceil(paramsB * 0.40); // Q3 CPU (more compressed)
-
-    // Determine verdict
-    let verdict, verdictColor, verdictIcon, summary;
-    let steps = [];
-    let warnings = [];
-    let alternatives = [];
-
-    if (m.type === "closed") {
-      verdict = "Cloud API Only";
-      verdictColor = "#8b5cf6";
-      verdictIcon = "☁";
-      summary = `${m.name} is a closed-source model hosted by ${m.org}. Your hardware is irrelevant — it runs on their servers.`;
-      steps = [
-        { n:1, text:`Go to ${m.docsUrl} and create an account`, done:false },
-        { n:2, text:`Generate an API key from their dashboard`, done:false },
-        { n:3, text:`Add it in OpenClaw → Dashboard → API Keys`, done:false },
-        { n:4, text:`Use it in the Playground tab instantly`, done:false },
-      ];
-    } else if (hw.vram >= vramQ4 && hw.gpuTier !== "integrated" && hw.gpuTier !== "unknown") {
-      verdict = "✓ Runs Natively on GPU";
-      verdictColor = "#22c55e";
-      verdictIcon = "⚡";
-      summary = `Your ${hw.vram}GB VRAM is enough to run ${m.name} with INT4 quantization at full GPU speed.`;
-      steps = [
-        { n:1, text:"Install Ollama: https://ollama.com/download" },
-        { n:2, text:`Run in terminal: ollama pull ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}` },
-        { n:3, text:`Start chatting: ollama run ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}` },
-        { n:4, text:"Optional: install Open WebUI for a browser interface" },
-      ];
-      if (hw.isHDD) warnings.push("⚠ You have an HDD — model loading will be slow (1–3 min). An SSD would reduce this to seconds.");
-    } else if (hw.ram >= ramCPU && hw.cpuScore >= 65) {
-      verdict = "Runs on CPU (Slow)";
-      verdictColor = "#eab308";
-      verdictIcon = "🐢";
-      summary = `Your ${hw.ram}GB RAM can hold the quantized model, but without a capable GPU it'll run on CPU at ~1–3 tokens/sec.`;
-      steps = [
-        { n:1, text:"Install Ollama: https://ollama.com/download" },
-        { n:2, text:`Run: ollama run ${m.model||m.name.toLowerCase().replace(/\s/g,"-")}:q4_0  (forces CPU mode)` },
-        { n:3, text:"Expect 1–3 tokens/sec — usable but slow for long outputs" },
-        { n:4, text:"Keep other apps closed to free up RAM during inference" },
-      ];
-      if (hw.isHDD) warnings.push("⚠ HDD detected — first load will take 3–5 minutes. Strongly recommend SSD.");
-      if (hw.cpuScore < 65) warnings.push("⚠ Your CPU is older/weaker — speeds may be below 1 tok/sec.");
-      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.6) && alt.id !== m.id).slice(0,3);
-    } else if (hw.ram >= ramQ3) {
-      verdict = "Needs Heavy Quantization (Q3)";
-      verdictColor = "#f97316";
-      verdictIcon = "⚙";
-      summary = `Your ${hw.ram}GB RAM is tight for ${m.name}. You need the most compressed Q3 version, and even then it may be unstable.`;
-      steps = [
-        { n:1, text:"Install llama.cpp: https://github.com/ggerganov/llama.cpp" },
-        { n:2, text:`Download the Q3_K_S GGUF version of ${m.name} from HuggingFace` },
-        { n:3, text:`Run: ./llama-cli -m ${m.name.toLowerCase().replace(/\s/g,"-")}.Q3_K_S.gguf -n 256` },
-        { n:4, text:"Close ALL other apps before running — every MB counts" },
-      ];
-      warnings.push(`⚠ RAM is very tight. Even Q3 needs ~${ramQ3}GB and you have ${hw.ram}GB. System may crash or swap heavily.`);
-      if (hw.isHDD) warnings.push("⚠ HDD + low RAM = very long load times and possible failures.");
-      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.5) && alt.id !== m.id).slice(0,3);
+    if(m.type==="closed"){
+      verdict="Cloud API — hardware is irrelevant";vColor=C.purple;vIcon="☁";
+      summary=`${m.name} is a closed model running on ${m.org}'s servers. Your PC specs don't matter.`;
+      steps=[{n:1,t:`Visit ${m.docsUrl} and create an account`},{n:2,t:"Generate an API key from the dashboard"},{n:3,t:"Add it in Gr(I)p → Dashboard → API Keys"},{n:4,t:"Use it immediately in the Playground tab"}];
+    } else if(m.localFeasible===false){
+      verdict="Too large for any consumer hardware";vColor=C.red;vIcon="✕";
+      summary=`${m.name} (${m.params}) requires hundreds of GB RAM — no consumer PC can run this locally.`;
+      steps=[{n:1,t:"Use the API instead",highlight:true},{n:2,t:`Get a ${m.envKey} at ${m.docsUrl}`},{n:3,t:"The API version costs very little — add key in Dashboard, use Playground"}];
+      warns.push(`Needs ~${q4ram}GB RAM minimum. Consumer machines max out at 128GB.`);
+      alts=openModels.filter(a=>a.localFeasible&&(a.ramQ4gb||0)<=usableRam&&a.id!==m.id).slice(0,3);
+    } else if(isGpuReal&&usableVram>=q4vram){
+      verdict="✓ Runs natively on your GPU";vColor=C.green;vIcon="⚡";
+      const tps=parsed.gpuTier==="flagship"?"50–80":parsed.gpuTier==="high"?"30–60":"15–40";
+      summary=`Your ${parsed.vramGB}GB VRAM fits this model at Q4_K_M (needs ${q4vram}GB). Expected speed: ~${tps} tok/s.`;
+      steps=[{n:1,t:"Download and install Ollama from https://ollama.com/download"},{n:2,t:`Pull the model: ollama pull ${m.ollamaId}`},{n:3,t:`Run it: ollama run ${m.ollamaId}`},{n:4,t:"Optional: install Open WebUI at https://github.com/open-webui/open-webui for a browser chat UI"}];
+      if(parsed.isHDD)warns.push("HDD detected — first model load will take 3–5 minutes. The model runs fine once loaded. An SSD makes loading near-instant.");
+    } else if(!isGpuReal&&usableRam>=q4vram){
+      verdict="CPU-only inference (slow, but works)";vColor=C.yellow;vIcon="🐢";
+      const tps=parsed.cpuScore>=65?"3–6":"1–3";
+      summary=`No dedicated GPU, but ${parsed.ramGB}GB RAM fits the model. CPU inference runs at ~${tps} tok/s — usable for non-realtime tasks.`;
+      steps=[{n:1,t:"Download Ollama: https://ollama.com/download"},{n:2,t:`Pull: ollama pull ${m.ollamaId}`},{n:3,t:`Reduce context to save RAM: set OLLAMA_CTX_SIZE=2048 before running`},{n:4,t:`Run: ollama run ${m.ollamaId}`}];
+      warns.push(`No dedicated GPU — all compute on CPU. ${tps} tokens/sec is usable for offline tasks but slow for chat.`);
+      if(parsed.isHDD)warns.push("HDD will cause slow initial loading (3–6 min per load). SSD is strongly recommended.");
+    } else if(isGpuReal&&usableVram<q4vram&&usableRam>=q4vram){
+      verdict="Partial GPU offload (slower than full GPU)";vColor=C.yellow;vIcon="⚙";
+      summary=`Your VRAM (${parsed.vramGB}GB) is below the ${q4vram}GB needed, but RAM (${parsed.ramGB}GB) can hold it. Ollama will split layers between GPU and RAM.`;
+      steps=[{n:1,t:"Install Ollama: https://ollama.com/download"},{n:2,t:`Pull: ollama pull ${m.ollamaId}`},{n:3,t:"Run normally — Ollama handles GPU/CPU layer splitting automatically"},{n:4,t:"Expect 5–20× slower than full VRAM. Speed depends on how many layers fit in GPU."}];
+      warns.push(`${parsed.vramGB}GB VRAM < ${q4vram}GB needed — overflow goes through PCIe to RAM, which is 5–20× slower than full GPU.`);
     } else {
-      verdict = "Not Feasible Locally";
-      verdictColor = "#ef4444";
-      verdictIcon = "✕";
-      summary = `${m.name} needs at least ${ramQ3}GB RAM or ${vramQ4}GB VRAM. Your system (${hw.ram}GB RAM, ${hw.vram}GB VRAM) can't run it locally.`;
-      steps = [
-        { n:1, text:`Use the API version via OpenClaw Playground instead`, highlight:true },
-        { n:2, text:`Get a free API key at ${m.docsUrl}` },
-        { n:3, text:"Add key in Dashboard → run in Playground with no hardware limits" },
-      ];
-      warnings.push(`✕ Minimum RAM for any quantized version: ~${ramQ3}GB. You have ${hw.ram}GB.`);
-      warnings.push(`✕ Minimum VRAM for GPU inference: ~${vramQ4}GB. You have ${hw.vram}GB.`);
-      alternatives = openModels.filter(alt => getParamsB(alt) <= Math.ceil(hw.ram * 0.6) && alt.id !== m.id).slice(0,3);
+      verdict="Not enough RAM or VRAM";vColor=C.red;vIcon="✕";
+      summary=`${m.name} needs ~${q4vram}GB VRAM or ~${q4ram}GB RAM at Q4. You have ${parsed.vramGB}GB VRAM and ${parsed.ramGB}GB RAM.`;
+      steps=[{n:1,t:"Use the cloud API — it costs less than hardware upgrades",highlight:true},{n:2,t:`Get your API key at ${m.docsUrl}`},{n:3,t:"Add key in Dashboard → test instantly in Playground"}];
+      warns.push(`Q4 minimum RAM: ~${q4ram}GB. You have ${parsed.ramGB}GB (${usableRam}GB after OS).`);
+      if(parsed.vramGB>0&&isGpuReal)warns.push(`Your ${parsed.vramGB}GB VRAM is not enough. This model needs ${q4vram}GB minimum.`);
+      alts=openModels.filter(a=>a.localFeasible&&(a.ramQ4gb||0)<=usableRam&&a.id!==m.id).slice(0,3);
     }
-
-    setParsed(hw);
-    setResult({ verdict, verdictColor, verdictIcon, summary, steps, warnings, alternatives, paramsB, vramQ4, ramCPU, ramQ3 });
-    setStep(3);
-    toastFn?.("Analysis complete!");
+    setResult({verdict,vColor,vIcon,summary,steps,warns,alts,q4ram,q4vram});setStep(3);
+    toastFn?.("Analysis complete");
   };
 
-  const reset = () => { setStep(1); setSelectedModel(null); setRaw(""); setParsed(null); setResult(null); };
+  const reset=()=>{setStep(1);setSel(null);setRaw("");setHw(null);setResult(null);};
 
   return (
-    <div style={S.main} className="page-enter">
-      {/* Header */}
-      <div style={{marginBottom:28}}>
-        <div style={S.sectionTitle}>⚙ Can I Run This Model?</div>
-        <div style={S.muted}>Select a model you want to run locally, paste your Windows system info, get a step-by-step action plan.</div>
+    <div style={main} className="fade">
+      <div style={{marginBottom:22}}>
+        <div style={{fontWeight:700,fontSize:22,color:C.text,marginBottom:3}}>Can I run this model?</div>
+        <div style={{color:C.muted,fontSize:13}}>Pick a model you want to run locally, paste your Windows specs, get a specific action plan.</div>
       </div>
 
-      {/* Step indicator */}
-      <div style={{...S.flex(0,"center","flex-start"), marginBottom:32, gap:0}}>
-        {[{n:1,l:"Pick Model"},{n:2,l:"Your Specs"},{n:3,l:"Action Plan"}].map((s,i) => (
+      <div style={{...fl(0),gap:0,marginBottom:26}}>
+        {[{n:1,l:"Pick model"},{n:2,l:"Your specs"},{n:3,l:"Action plan"}].map((s,i)=>(
           <div key={s.n} style={{display:"flex",alignItems:"center"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,cursor: s.n < step ? "pointer":"default"}}
-              onClick={() => s.n < step && setStep(s.n)}>
-              <div style={{width:28,height:28,borderRadius:"50%",border:`2px solid ${step>=s.n?"#f97316":"#2a1f0e"}`,
-                background: step===s.n?"#f97316":step>s.n?"rgba(249,115,22,0.2)":"transparent",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:12,fontWeight:700,color:step>=s.n?"#f97316":"#6b5c42",
-                transition:"all 0.2s"}}>
-                {step>s.n ? "✓" : s.n}
-              </div>
-              <span style={{fontSize:12,color:step>=s.n?"#e8dcc8":"#6b5c42",letterSpacing:"0.04em"}}>{s.l}</span>
+            <div style={{...fl(7),cursor:s.n<step?"pointer":"default"}} onClick={()=>s.n<step&&setStep(s.n)}>
+              <div style={{width:25,height:25,borderRadius:"50%",background:step===s.n?C.orange:step>s.n?"rgba(249,115,22,0.2)":"transparent",border:`2px solid ${step>=s.n?C.orange:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:step>=s.n?step===s.n?"#111":C.orange:C.muted}}>{step>s.n?"✓":s.n}</div>
+              <span style={{fontSize:12.5,color:step>=s.n?C.text:C.muted}}>{s.l}</span>
             </div>
-            {i<2 && <div style={{width:40,height:1,background:step>s.n?"#f97316":"#2a1f0e",margin:"0 8px",transition:"background 0.3s"}} />}
+            {i<2&&<div style={{width:32,height:1,background:step>s.n?C.orange:C.border,margin:"0 7px"}}/>}
           </div>
         ))}
       </div>
 
-      {/* STEP 1 — Pick Model */}
-      {step === 1 && (
-        <div className="page-enter">
-          <div style={{fontSize:12,color:"#6b5c42",marginBottom:16,letterSpacing:"0.05em"}}>
-            SELECT THE MODEL YOU WANT TO RUN LOCALLY
-          </div>
-          <div style={{background:"rgba(139,92,246,0.06)",border:"1px solid rgba(139,92,246,0.2)",
-            borderRadius:8,padding:"10px 14px",fontSize:12,color:"#8a7a62",marginBottom:20}}>
-            ☁ Closed models (GPT-4o, Gemini, Claude) are grayed out — they can't run locally by design.
-          </div>
-          <div style={S.grid2}>
-            {models.map(m => {
-              const isOpen = m.type === "open";
-              const sel = selectedModel?.id === m.id;
-              return (
-                <div key={m.id} style={{
-                  background: sel?"rgba(249,115,22,0.1)":"#120e08",
-                  border:`2px solid ${sel?"#f97316":isOpen?"#2a1f0e":"#1a1208"}`,
-                  borderRadius:10, padding:"14px 16px",
-                  cursor: isOpen?"pointer":"not-allowed",
-                  opacity: isOpen?1:0.4, transition:"all 0.15s"
-                }} onClick={() => isOpen && setSelectedModel(m)}>
-                  <div style={S.flex(10)}>
-                    <span style={{fontSize:20,color: isOpen?"#f97316":"#6b5c42"}}>{m.icon}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:14,color:"#f4e4c4"}}>{m.name}</div>
-                      <div style={{fontSize:11,color:"#6b5c42"}}>{m.org} · {m.params}</div>
-                    </div>
-                    {sel && <span style={{color:"#f97316",fontSize:18}}>✓</span>}
-                    {!isOpen && <span style={{fontSize:10,color:"#6b5c42"}}>API only</span>}
-                  </div>
+      {step===1&&(
+        <div className="fade">
+          <div style={{fontSize:12,color:C.muted,marginBottom:12}}>Closed models (GPT-4o, Claude, Gemini) are grayed out — they run on provider servers, not your hardware.</div>
+          <div style={grid2}>
+            {models.map(m=>{
+              const isOpen=m.type==="open";const isSel=sel?.id===m.id;
+              return(
+                <div key={m.id} style={{...card,padding:"12px 15px",cursor:isOpen?"pointer":"not-allowed",opacity:isOpen?1:0.3,borderColor:isSel?C.orange:C.border,background:isSel?C.orangeDim:C.surface}} onClick={()=>isOpen&&setSel(m)}>
+                  <div style={fl(8)}><span style={{color:C.orange,fontSize:17}}>{m.icon}</span><div style={{flex:1}}><div style={{fontWeight:600,fontSize:13,color:C.text}}>{m.name}</div><div style={{fontSize:11,color:C.muted}}>{m.org} · {m.params}</div></div>{isSel&&<span style={{color:C.orange}}>✓</span>}{!isOpen&&<span style={{fontSize:10,color:C.muted}}>API only</span>}</div>
+                  {isOpen&&m.ramQ4gb&&<div style={{fontSize:11,color:C.muted,marginTop:5}}>Needs ~{m.ramQ4gb}GB RAM (Q4)</div>}
+                  {isOpen&&m.localFeasible===false&&<div style={{fontSize:11,color:C.red,marginTop:5}}>Requires datacenter hardware</div>}
                 </div>
               );
             })}
           </div>
-          <button style={{...S.btn("primary"),marginTop:24,fontSize:13,padding:"12px 28px",
-            opacity:selectedModel?1:0.4}}
-            onClick={() => selectedModel && setStep(2)} className="hov-btn">
-            Next: Paste Your Specs →
-          </button>
+          <button style={{...btn("fill"),marginTop:18,fontSize:13,padding:"9px 22px",opacity:sel?1:0.4}} onClick={()=>sel&&setStep(2)} className="hov">Next →</button>
         </div>
       )}
 
-      {/* STEP 2 — Paste Config */}
-      {step === 2 && (
-        <div className="page-enter">
-          <div style={{...S.flex(10,"center","space-between"),marginBottom:16}}>
-            <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:16,color:"#f4e4c4"}}>
-              Checking: <span style={{color:"#f97316"}}>{selectedModel.name}</span>
-            </div>
-            <button style={{...S.btn("ghost"),fontSize:11}} onClick={()=>setStep(1)} className="hov-btn">← Change Model</button>
+      {step===2&&(
+        <div className="fade">
+          <div style={{...fl(0,"center","space-between"),marginBottom:13}}>
+            <div style={{fontWeight:600,fontSize:15,color:C.text}}>Checking: <span style={{color:C.orange}}>{sel.name}</span></div>
+            <button style={btn("line")} onClick={()=>setStep(1)} className="hov">← Change</button>
           </div>
-
-          <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.2)",
-            borderRadius:10,padding:"14px 18px",marginBottom:20,fontSize:12,color:"#8a7a62",lineHeight:1.9}}>
-            <strong style={{color:"#f97316"}}>How to get your Windows system info:</strong><br/>
-            1. Press <kbd style={{background:"#1a1208",border:"1px solid #2a1f0e",borderRadius:3,padding:"1px 7px",color:"#e8dcc8",fontSize:11}}>Win + I</kbd> to open Settings<br/>
-            2. Go to <strong style={{color:"#e8dcc8"}}>System → About</strong><br/>
-            3. Select all the text in the "Device specifications" section<br/>
-            4. Copy it and paste below ↓
+          <div style={{...card,padding:"12px 15px",marginBottom:14,fontSize:12.5,color:C.muted,lineHeight:1.9}}>
+            <strong style={{color:C.text}}>Getting your Windows specs:</strong><br/>
+            Press <kbd style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:3,padding:"1px 6px",color:C.text,fontSize:11}}>Win + I</kbd> → System → About → copy the "Device specifications" section and paste below.
           </div>
-
-          <textarea
-            value={raw}
-            onChange={e => setRaw(e.target.value)}
-            placeholder={"Paste your Windows system info here...\n\nExample format:\nDevice Name\tDESKTOP-XXXXX\nProcessor\tIntel(R) Core(TM) i5-12400\nInstalled RAM\t16.00 GB\nGraphics Card\tNVIDIA GeForce RTX 3060 (12 GB)\nSystem Type\t64-bit operating system..."}
-            style={{...S.input, height:200, resize:"vertical", fontSize:12, lineHeight:1.8,
-              fontFamily:"'Courier New',monospace", marginBottom:16}}
-          />
-
-          <div style={S.flex(10)}>
-            <button style={{...S.btn("primary"),fontSize:13,padding:"12px 28px",
-              opacity:raw.trim()?1:0.4}}
-              onClick={analyze} className="hov-btn">
-              ⚡ Analyze & Get Action Plan
-            </button>
-            <button style={S.btn("ghost")} onClick={()=>setStep(1)} className="hov-btn">← Back</button>
+          <textarea value={raw} onChange={e=>setRaw(e.target.value)}
+            placeholder={"Device Name\tDESKTOP-XXXXX\nProcessor\tIntel Core i5-12400\nInstalled RAM\t16.00 GB\nGraphics Card\tNVIDIA GeForce RTX 3060 (12 GB)\nStorage\t512 GB SSD\nSystem Type\t64-bit operating system"}
+            style={{...inp,height:185,resize:"vertical",fontSize:12.5,lineHeight:1.8,marginBottom:12}}/>
+          <div style={fl(7)}>
+            <button style={{...btn("fill"),fontSize:13,padding:"9px 20px",opacity:raw.trim()?1:0.4}} onClick={analyze} className="hov">Analyze →</button>
+            <button style={btn("line")} onClick={()=>setStep(1)} className="hov">← Back</button>
           </div>
         </div>
       )}
 
-      {/* STEP 3 — Results */}
-      {step === 3 && result && parsed && (
-        <div className="page-enter">
-          {/* Verdict banner */}
-          <div style={{background:`rgba(${result.verdictColor==="#22c55e"?"34,197,94":result.verdictColor==="#eab308"?"234,179,8":result.verdictColor==="#f97316"?"249,115,22":result.verdictColor==="#8b5cf6"?"139,92,246":"239,68,68"},0.08)`,
-            border:`1px solid ${result.verdictColor}`,borderRadius:12,padding:"20px 24px",marginBottom:24}}>
-            <div style={{...S.flex(12,"flex-start","space-between"),flexWrap:"wrap",gap:12}}>
-              <div style={S.flex(14)}>
-                <div style={{width:52,height:52,borderRadius:12,
-                  background:`rgba(${result.verdictColor==="#22c55e"?"34,197,94":result.verdictColor==="#eab308"?"234,179,8":result.verdictColor==="#f97316"?"249,115,22":result.verdictColor==="#8b5cf6"?"139,92,246":"239,68,68"},0.15)`,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:24,flexShrink:0}}>
-                  {result.verdictIcon}
-                </div>
-                <div>
-                  <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:20,color:result.verdictColor}}>{result.verdict}</div>
-                  <div style={{fontSize:13,color:"#8a7a62",marginTop:4,lineHeight:1.6,maxWidth:540}}>{result.summary}</div>
-                </div>
+      {step===3&&result&&hw&&(
+        <div className="fade">
+          <div style={{...card,borderColor:result.vColor,padding:"17px 19px",marginBottom:18}}>
+            <div style={{...fl(12,"flex-start","space-between"),flexWrap:"wrap",gap:10}}>
+              <div style={fl(13,"flex-start")}>
+                <div style={{width:46,height:46,borderRadius:9,background:`rgba(${result.vColor==="#22c55e"?"34,197,94":result.vColor==="#eab308"?"234,179,8":result.vColor==="#ef4444"?"239,68,68":result.vColor==="#a78bfa"?"167,139,250":"249,115,22"},0.12)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{result.vIcon}</div>
+                <div><div style={{fontWeight:700,fontSize:16,color:result.vColor}}>{result.verdict}</div><div style={{fontSize:13,color:C.muted,marginTop:3,lineHeight:1.6,maxWidth:480}}>{result.summary}</div></div>
               </div>
-              <div style={{...S.flex(8), flexShrink:0}}>
-                <button style={S.btn("ghost")} onClick={()=>setStep(2)} className="hov-btn">← Edit Specs</button>
-                <button style={S.btn("ghost")} onClick={reset} className="hov-btn">↺ Start Over</button>
+              <div style={fl(6)}>
+                <button style={btn("line")} onClick={()=>setStep(2)} className="hov">← Edit specs</button>
+                <button style={btn("line")} onClick={reset} className="hov">↺ Start over</button>
               </div>
             </div>
           </div>
 
-          {/* System summary */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8,marginBottom:24}}>
-            {[
-              {l:"CPU", v:parsed.processor.split("@")[0].trim().slice(0,22), c:"#f97316"},
-              {l:"RAM", v:`${parsed.ram} GB`, c:parsed.ram>=16?"#22c55e":parsed.ram>=8?"#eab308":"#ef4444"},
-              {l:"VRAM", v:`${parsed.vram} GB`, c:parsed.vram>=8?"#22c55e":parsed.vram>=4?"#eab308":"#ef4444"},
-              {l:"Storage", v:parsed.isSSD?"SSD ✓":parsed.isHDD?"HDD ⚠":"?", c:parsed.isSSD?"#22c55e":"#eab308"},
-              {l:"Model Size", v:`~${result.paramsB}B params`, c:"#8b5cf6"},
-              {l:"Min VRAM (Q4)", v:`${result.vramQ4} GB needed`, c:parsed.vram>=result.vramQ4?"#22c55e":"#ef4444"},
-            ].map(s => (
-              <div key={s.l} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:8,padding:"10px 14px"}}>
-                <div style={{fontSize:10,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:3}}>{s.l}</div>
-                <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:s.c}}>{s.v}</div>
-              </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:7,marginBottom:16}}>
+            {[{l:"CPU",v:hw.proc.split("@")[0].trim().slice(0,20),c:C.orange},{l:"RAM",v:`${hw.ramGB}GB`,c:hw.ramGB>=16?C.green:hw.ramGB>=8?C.yellow:C.red},{l:"VRAM",v:`${hw.vramGB}GB`,c:hw.vramGB>=8?C.green:hw.vramGB>=4?C.yellow:C.red},{l:"GPU type",v:hw.gpuTier,c:C.text},{l:"Storage",v:hw.isSSD?"SSD ✓":hw.isHDD?"HDD ⚠":"?",c:hw.isSSD?C.green:C.yellow},{l:"Model needs",v:`${result.q4vram}GB VRAM`,c:hw.vramGB>=result.q4vram?C.green:C.red}].map(s=>(
+              <div key={s.l} style={{...card,padding:"10px 13px"}}><div style={{fontSize:10,color:C.muted,letterSpacing:"0.05em",marginBottom:2}}>{s.l.toUpperCase()}</div><div style={{fontWeight:700,fontSize:13,color:s.c}}>{s.v}</div></div>
             ))}
           </div>
 
-          {/* Warnings */}
-          {result.warnings.length > 0 && (
-            <div style={{marginBottom:20, display:"flex", flexDirection:"column", gap:6}}>
-              {result.warnings.map((w,i) => (
-                <div key={i} style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.25)",
-                  borderRadius:8,padding:"10px 14px",fontSize:12,color:"#f87171",lineHeight:1.5}}>{w}</div>
-              ))}
-            </div>
-          )}
+          {result.warns.length>0&&<div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:14}}>{result.warns.map((w,i)=><div key={i} style={{background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:7,padding:"8px 12px",fontSize:12.5,color:"#f87171",lineHeight:1.5}}>{w}</div>)}</div>}
 
-          {/* Action steps */}
-          <div style={{marginBottom:24}}>
-            <div style={{fontSize:12,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:12}}>ACTION PLAN</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {result.steps.map((s,i) => (
-                <div key={i} style={{...S.flex(14,"flex-start"),
-                  background: s.highlight?"rgba(249,115,22,0.06)":"#120e08",
-                  border:`1px solid ${s.highlight?"rgba(249,115,22,0.3)":"#2a1f0e"}`,
-                  borderRadius:10, padding:"14px 16px"}}>
-                  <div style={{width:26,height:26,borderRadius:"50%",background:"rgba(249,115,22,0.12)",
-                    border:"1px solid rgba(249,115,22,0.3)",flexShrink:0,
-                    display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:11,fontWeight:700,color:"#f97316"}}>
-                    {s.n}
-                  </div>
-                  <div style={{fontSize:13,color:"#e8dcc8",lineHeight:1.6,fontFamily:"'Courier New',monospace"}}>
-                    {s.text}
-                  </div>
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,color:C.muted,letterSpacing:"0.05em",marginBottom:9}}>WHAT TO DO</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {result.steps.map((s,i)=>(
+                <div key={i} style={{...fl(11,"flex-start"),...card,background:s.highlight?C.orangeDim:C.surface,borderColor:s.highlight?"rgba(249,115,22,0.3)":C.border,padding:"11px 13px"}}>
+                  <div style={{width:23,height:23,borderRadius:"50%",background:"rgba(249,115,22,0.12)",border:"1px solid rgba(249,115,22,0.25)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.orange}}>{s.n}</div>
+                  <div style={{fontSize:13,color:C.text,lineHeight:1.6,fontFamily:"ui-monospace,monospace"}}>{s.t}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Alternative models */}
-          {result.alternatives.length > 0 && (
+          {result.alts.length>0&&(
             <div>
-              <div style={{fontSize:12,color:"#6b5c42",letterSpacing:"0.07em",marginBottom:12}}>
-                BETTER ALTERNATIVES FOR YOUR HARDWARE
-              </div>
-              <div style={S.grid3}>
-                {result.alternatives.map(alt => (
-                  <div key={alt.id} style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:10,padding:"14px 16px",
-                    cursor:"pointer",transition:"all 0.15s"}}
-                    className="hov-card"
-                    onClick={() => { setSelectedModel(alt); setResult(null); setParsed(null); setStep(2); }}>
-                    <div style={S.flex(8)}>
-                      <span style={{color:"#f97316",fontSize:18}}>{alt.icon}</span>
-                      <div>
-                        <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:13,color:"#f4e4c4"}}>{alt.name}</div>
-                        <div style={{fontSize:11,color:"#6b5c42"}}>{alt.params} · {alt.org}</div>
-                      </div>
-                    </div>
-                    <div style={{fontSize:11,color:"#22c55e",marginTop:8}}>✓ Fits your {parsed.ram}GB RAM</div>
-                    <div style={{fontSize:10,color:"#6b5c42",marginTop:4}}>Click to check this model instead →</div>
+              <div style={{fontSize:11,color:C.muted,letterSpacing:"0.05em",marginBottom:9}}>MODELS THAT FIT YOUR HARDWARE</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:7}}>
+                {result.alts.map(a=>(
+                  <div key={a.id} style={{...card,padding:"12px 14px",cursor:"pointer"}} className="ch" onClick={()=>{setSel(a);setResult(null);setHw(null);setStep(2);}}>
+                    <div style={fl(7)}><span style={{color:C.orange,fontSize:16}}>{a.icon}</span><div><div style={{fontWeight:600,fontSize:13,color:C.text}}>{a.name}</div><div style={{fontSize:11,color:C.muted}}>{a.params} · needs {a.ramQ4gb}GB</div></div></div>
+                    <div style={{fontSize:11.5,color:C.green,marginTop:7}}>✓ fits your {hw.ramGB}GB RAM</div>
+                    <div style={{fontSize:10.5,color:C.muted,marginTop:3}}>Click to check this model →</div>
                   </div>
                 ))}
               </div>
@@ -1724,51 +939,419 @@ function HardwarePage({ models }) {
   );
 }
 
-// ══ KEY MODAL ═════════════════════════════════════════════════
-function KeyModal({ model:m, apiKeys, setApiKeys, onClose }) {
-  const [val, setVal] = useState(apiKeys[m.id]||"");
+function DashboardPage({apiKeys,setApiKeys,logs,setLogs,saved,models,setPage}) {
+  const [tab,setTab]=useState("keys");
+  const [editKey,setEditKey]=useState({});
+  const [showKey,setShowKey]=useState({});
+  const saveKey=(id)=>{const v=editKey[id]?.trim();if(!v)return;setApiKeys(p=>({...p,[id]:v}));setEditKey(p=>({...p,[id]:""}));toastFn?.(`Key saved for ${models.find(m=>m.id===id)?.name}`);};
+  const removeKey=(id)=>{setApiKeys(p=>{const n={...p};delete n[id];return n;});toastFn?.("Key removed","err");};
+  const totalCalls=logs.length,okCalls=logs.filter(l=>l.ok).length,totalTok=logs.reduce((a,l)=>a+(l.tokens||0),0);
+  const byModel=models.map(m=>({...m,calls:logs.filter(l=>l.modelId===m.id).length,ok:logs.filter(l=>l.modelId===m.id&&l.ok).length,tok:logs.filter(l=>l.modelId===m.id).reduce((a,l)=>a+(l.tokens||0),0)})).filter(m=>m.calls>0).sort((a,b)=>b.calls-a.calls);
+  const tabs=[{id:"keys",l:"API Keys"},{id:"usage",l:"Usage"},{id:"logs",l:"Call Logs"},{id:"saved",l:"Saved"}];
+  return (
+    <div style={main} className="fade">
+      <div style={{marginBottom:22}}><div style={{fontWeight:700,fontSize:22,color:C.text,marginBottom:3}}>Dashboard</div><div style={{color:C.muted,fontSize:13}}>Your keys, usage, and saved models.</div></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:9,marginBottom:22}}>
+        {[{n:Object.keys(apiKeys).length,l:"keys saved",c:C.orange},{n:totalCalls,l:"total calls",c:C.green},{n:`${okCalls}/${totalCalls}`,l:"successful",c:C.yellow},{n:totalTok.toLocaleString(),l:"tokens",c:C.purple}].map(s=>(
+          <div key={s.l} style={{...card,padding:"13px 16px"}}><div style={{fontSize:21,fontWeight:700,color:s.c,marginBottom:2}}>{s.n}</div><div style={{fontSize:11.5,color:C.muted}}>{s.l}</div></div>
+        ))}
+      </div>
+      <div style={{...fl(2),marginBottom:16,borderBottom:`1px solid ${C.border}`,paddingBottom:0}}>
+        {tabs.map(t=><button key={t.id} style={{...btn(tab===t.id?"dim":"line"),borderRadius:"6px 6px 0 0",borderBottom:"none",marginBottom:-1}} onClick={()=>setTab(t.id)} className="hov">{t.l}</button>)}
+      </div>
+      {tab==="keys"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:9}}>
+          <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.18)",borderRadius:7,padding:"9px 13px",fontSize:12,color:C.muted,lineHeight:1.7}}>🔐 Keys are saved to your browser localStorage only. They never leave your device — only sent directly to each provider's API when you make a call.</div>
+          {models.map(m=>{const has=!!apiKeys[m.id];return(
+            <div key={m.id} style={{...card,padding:"13px 16px"}}>
+              <div style={{...fl(0,"flex-start","space-between"),flexWrap:"wrap",gap:9}}>
+                <div style={fl(8)}><div style={{width:32,height:32,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",color:C.orange,fontSize:15}}>{m.icon}</div><div><div style={{fontWeight:600,fontSize:13,color:C.text}}>{m.name}</div><div style={{fontSize:11,color:C.muted}}>{m.org} · <span style={{color:C.orangeL}}>{m.envKey}</span></div></div></div>
+                <div style={{...fl(6),flex:1,minWidth:250}}>
+                  {has?(<><input type={showKey[m.id]?"text":"password"} readOnly value={showKey[m.id]?apiKeys[m.id]:"•".repeat(Math.min(apiKeys[m.id].length,32))} style={{...inp,flex:1,fontSize:12,color:C.green}}/><button style={btn("line")} onClick={()=>setShowKey(p=>({...p,[m.id]:!p[m.id]}))} className="hov">{showKey[m.id]?"Hide":"Show"}</button><button style={{...btn("line"),color:C.red,borderColor:"rgba(239,68,68,0.3)"}} onClick={()=>removeKey(m.id)} className="hov">Remove</button></>):(<><input type="password" placeholder={`Paste ${m.envKey}…`} value={editKey[m.id]||""} onChange={e=>setEditKey(p=>({...p,[m.id]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&saveKey(m.id)} style={{...inp,flex:1,fontSize:12}}/><button style={btn("fill")} onClick={()=>saveKey(m.id)} className="hov">Save</button><a href={m.docsUrl} target="_blank" rel="noreferrer" style={{...btn("line"),textDecoration:"none",fontSize:12}}>Get key ↗</a></>)}
+                </div>
+              </div>
+            </div>
+          );})}
+        </div>
+      )}
+      {tab==="usage"&&(
+        <div>
+          {byModel.length===0?(<div style={{textAlign:"center",padding:52,color:C.muted}}><div style={{fontSize:13}}>No usage yet.</div><button style={{...btn("fill"),marginTop:13}} onClick={()=>setPage("playground")} className="hov">Go to Playground</button></div>):(
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              {byModel.map(m=>(
+                <div key={m.id} style={{...card,padding:"13px 16px"}}>
+                  <div style={{...fl(0,"center","space-between"),marginBottom:9}}>
+                    <div style={fl(8)}><span style={{color:C.orange,fontSize:17}}>{m.icon}</span><div><div style={{fontWeight:600,fontSize:13,color:C.text}}>{m.name}</div><div style={{fontSize:11,color:C.muted}}>{m.org}</div></div></div>
+                    <div style={fl(18)}>{[{v:m.calls,l:"calls",c:C.orange},{v:m.ok,l:"ok",c:C.green},{v:m.tok,l:"tokens",c:C.yellow}].map(s=><div key={s.l} style={{textAlign:"center"}}><div style={{fontWeight:700,fontSize:17,color:s.c}}>{s.v.toLocaleString()}</div><div style={{fontSize:10,color:C.muted}}>{s.l}</div></div>)}</div>
+                  </div>
+                  <div style={{height:3,background:C.faint,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${(m.calls/totalCalls)*100}%`,background:C.orange,borderRadius:2}}/></div>
+                  <div style={{fontSize:10.5,color:C.muted,marginTop:3}}>{((m.calls/totalCalls)*100).toFixed(0)}% of all calls</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {tab==="logs"&&(
+        <div>
+          {logs.length===0?<div style={{textAlign:"center",padding:52,color:C.muted}}>No logs yet.</div>:(
+            <>
+              <div style={{...card,overflow:"hidden"}}>
+                <div style={{display:"grid",gridTemplateColumns:"105px 1fr 85px 65px 75px",padding:"8px 14px",background:C.surface2,borderBottom:`1px solid ${C.border}`,fontSize:10.5,color:C.muted,letterSpacing:"0.05em"}}><div>TIME</div><div>PROMPT</div><div>MODEL</div><div>STATUS</div><div>TOKENS</div></div>
+                {logs.slice(0,60).map(log=>{const m=models.find(x=>x.id===log.modelId);return(
+                  <div key={log.id} style={{display:"grid",gridTemplateColumns:"105px 1fr 85px 65px 75px",padding:"8px 14px",borderBottom:`1px solid ${C.faint}`,fontSize:12.5,alignItems:"center"}}>
+                    <div style={{color:C.muted,fontSize:10.5}}>{new Date(log.ts).toLocaleTimeString()}</div>
+                    <div style={{color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{log.prompt}…</div>
+                    <div style={{fontSize:11.5,color:C.orangeL}}>{m?.name?.split(" ")[0]||log.modelId}</div>
+                    <div style={{color:log.ok?C.green:C.red,fontSize:11}}>{log.ok?"✓":"✕"}</div>
+                    <div style={{color:C.yellow,fontSize:11.5}}>{log.tokens}</div>
+                  </div>
+                );})}
+              </div>
+              <button style={{...btn("line"),marginTop:10,fontSize:11.5,color:C.red,borderColor:"rgba(239,68,68,0.3)"}} onClick={()=>{if(window.confirm("Clear all logs?")){setLogs([]);localStorage.setItem("grip_logs","[]");}}} className="hov">✕ Clear logs</button>
+            </>
+          )}
+        </div>
+      )}
+      {tab==="saved"&&(
+        <div style={grid2}>
+          {saved.length===0?(<div style={{gridColumn:"1/-1",textAlign:"center",padding:52,color:C.muted}}><div style={{fontSize:13}}>No saved models. Star ☆ a model in Explore.</div><button style={{...btn("fill"),marginTop:13}} onClick={()=>setPage("explore")} className="hov">Explore</button></div>):models.filter(m=>saved.includes(m.id)).map(m=>(
+            <div key={m.id} style={{...card,padding:15}}>
+              <div style={fl(8)}><span style={{color:C.orange,fontSize:17}}>{m.icon}</span><div style={{flex:1}}><div style={{fontWeight:600,fontSize:14,color:C.text}}>{m.name}</div><div style={{fontSize:11.5,color:C.muted}}>{m.org} · {m.params}</div></div><span style={badge(m.tier)}>{m.tier}</span></div>
+              <div style={{color:C.muted,fontSize:12.5,margin:"9px 0",lineHeight:1.6}}>{m.desc}</div>
+              <div style={{...fl(0,"center","space-between"),paddingTop:9,borderTop:`1px solid ${C.border}`}}><span style={{fontSize:11.5,color:C.muted}}>MMLU <strong style={{color:C.text}}>{m.mmlu}%</strong> · HE <strong style={{color:C.text}}>{m.humaneval}%</strong></span><a href={m.docsUrl} target="_blank" rel="noreferrer" style={{...btn("line"),fontSize:11.5,textDecoration:"none"}}>Docs ↗</a></div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const save = () => {
-    if (!val.trim()) return;
-    setApiKeys(p=>({...p,[m.id]:val.trim()}));
-    toastFn?.(`Key saved for ${m.name}`);
-    onClose();
+function ClaudeSkillsPage({apiKeys, addLog}) {
+  const [activeSkill, setActiveSkill] = useState(null);
+  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [input, setInput] = useState("");
+  const [output, setOutput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [customParams, setCustomParams] = useState({});
+  const hasKey = !!apiKeys["claude_opus"] || !!apiKeys["claude_sonnet"] || !!apiKeys["claude_haiku"];
+  const apiKey = apiKeys["claude_opus"] || apiKeys["claude_sonnet"] || apiKeys["claude_haiku"] || "";
+
+  const CLAUDE_MODELS = [
+    {id:"claude-opus-4-6", label:"Opus 4.6 — most capable", cost:"$5/1M"},
+    {id:"claude-sonnet-4-6", label:"Sonnet 4.6 — recommended", cost:"$3/1M"},
+    {id:"claude-haiku-4-5-20251001", label:"Haiku 4.5 — fastest & cheapest", cost:"$1/1M"},
+  ];
+
+  const SKILLS = [
+    {
+      id:"summarize", icon:"◎", name:"Summarizer", category:"Writing",
+      desc:"Condenses any text to a clear, structured summary. Control the length and style.",
+      systemPrompt:"You are a professional summarizer. Produce a clear, well-structured summary. Be concise but capture all key points. Use bullet points for main takeaways at the end.",
+      inputLabel:"Paste the text to summarize", inputPlaceholder:"Paste an article, document, or any long text here…",
+      params:[{id:"length", label:"Summary length", type:"select", options:["Brief (2-3 sentences)","Medium (1 paragraph)","Detailed (multiple paragraphs)"], default:"Medium (1 paragraph)"}],
+      buildPrompt:(input, p) => `Summarize the following text. Target length: ${p.length||"Medium (1 paragraph)"}.\n\nText:\n${input}`,
+    },
+    {
+      id:"code_explain", icon:"◷", name:"Code Explainer", category:"Code",
+      desc:"Explains what any code does in plain English. Works with any language.",
+      systemPrompt:"You are an expert software engineer and educator. Explain code clearly for the specified audience level. Break down complex logic into understandable parts.",
+      inputLabel:"Paste your code", inputPlaceholder:"Paste any code snippet here…",
+      params:[{id:"level", label:"Audience level", type:"select", options:["Beginner","Intermediate","Expert"], default:"Intermediate"}],
+      buildPrompt:(input, p) => `Explain this code for a ${p.level||"Intermediate"} developer. Describe what it does, how it works, and any important patterns or gotchas.\n\nCode:\n\`\`\`\n${input}\n\`\`\``,
+    },
+    {
+      id:"code_review", icon:"◸", name:"Code Reviewer", category:"Code",
+      desc:"Reviews code for bugs, security issues, performance problems, and style.",
+      systemPrompt:"You are a senior software engineer conducting a thorough code review. Identify bugs, security vulnerabilities, performance issues, and style improvements. Be specific and actionable.",
+      inputLabel:"Paste code to review", inputPlaceholder:"Paste your code here…",
+      params:[{id:"focus", label:"Focus area", type:"select", options:["All issues","Bugs only","Security only","Performance only","Style only"], default:"All issues"}],
+      buildPrompt:(input, p) => `Review this code. Focus: ${p.focus||"All issues"}. List specific issues with line references where possible, and suggest fixes.\n\nCode:\n\`\`\`\n${input}\n\`\`\``,
+    },
+    {
+      id:"translate", icon:"◐", name:"Translator", category:"Writing",
+      desc:"Translates text between any languages while preserving tone and meaning.",
+      systemPrompt:"You are a professional translator. Preserve the original tone, style, and meaning. Handle idioms and cultural nuances appropriately.",
+      inputLabel:"Text to translate", inputPlaceholder:"Enter text to translate…",
+      params:[
+        {id:"from", label:"From language", type:"text", placeholder:"English (or 'auto-detect')", default:"auto-detect"},
+        {id:"to", label:"To language", type:"text", placeholder:"e.g. Spanish, Japanese, French", default:"Spanish"},
+      ],
+      buildPrompt:(input, p) => `Translate the following text from ${p.from||"auto-detect"} to ${p.to||"Spanish"}. Preserve tone and meaning.\n\nText:\n${input}`,
+    },
+    {
+      id:"debug", icon:"◉", name:"Bug Fixer", category:"Code",
+      desc:"Identifies bugs in your code, explains the cause, and provides a fixed version.",
+      systemPrompt:"You are an expert debugger. Identify all bugs, explain what causes each one, and provide a corrected version of the code.",
+      inputLabel:"Paste buggy code (and describe the error if you have one)", inputPlaceholder:"Code here…\n\n// Error message (optional):\n// e.g. TypeError: Cannot read property 'x' of undefined",
+      params:[{id:"lang", label:"Language", type:"text", placeholder:"e.g. Python, JavaScript", default:""}],
+      buildPrompt:(input, p) => `Debug this ${p.lang||""} code. List each bug found, explain why it causes a problem, and provide the fixed code.\n\n${input}`,
+    },
+    {
+      id:"email", icon:"◁", name:"Email Writer", category:"Writing",
+      desc:"Drafts professional emails from a brief description of what you need to say.",
+      systemPrompt:"You are a professional business writer. Draft clear, appropriately toned emails that get results. Include subject line.",
+      inputLabel:"Describe what you need to say", inputPlaceholder:"e.g. Follow up on a job application I sent 2 weeks ago to TechCorp for a frontend developer role…",
+      params:[{id:"tone", label:"Tone", type:"select", options:["Professional","Friendly","Formal","Direct","Apologetic"], default:"Professional"}],
+      buildPrompt:(input, p) => `Write a ${p.tone||"Professional"} email based on this context:\n${input}\n\nInclude: Subject line, greeting, body, closing.`,
+    },
+    {
+      id:"qa", icon:"◑", name:"Q&A over Document", category:"Analysis",
+      desc:"Paste a document and ask questions about it. Claude reads the full content.",
+      systemPrompt:"You are a precise, helpful assistant answering questions about a provided document. Only answer based on the document content. If the answer is not in the document, say so.",
+      inputLabel:"Paste your document, then ask your question below", inputPlaceholder:"[Your document text]\n\n---\nQ: What is…",
+      params:[],
+      buildPrompt:(input) => `The user has provided a document and a question. Read the document carefully and answer only the question asked.\n\nDocument + Question:\n${input}`,
+    },
+    {
+      id:"extract", icon:"◃", name:"Data Extractor", category:"Analysis",
+      desc:"Extracts structured data from unstructured text — emails, documents, web pages.",
+      systemPrompt:"You are a data extraction expert. Extract exactly the requested fields from the provided text. Return clean, structured output. If a field is not found, write N/A.",
+      inputLabel:"Paste the text and describe what to extract", inputPlaceholder:"[Paste text here]\n\n---\nExtract: name, email, phone number, company name",
+      params:[{id:"format", label:"Output format", type:"select", options:["JSON","Markdown table","Plain list","CSV"], default:"JSON"}],
+      buildPrompt:(input, p) => `Extract the requested data from the text below. Output format: ${p.format||"JSON"}.\n\n${input}`,
+    },
+    {
+      id:"rewrite", icon:"◂", name:"Tone Rewriter", category:"Writing",
+      desc:"Rewrites any text in a different tone — formal, casual, persuasive, simplified.",
+      systemPrompt:"You are a professional editor. Rewrite text to match the requested tone while preserving the core meaning and all key information.",
+      inputLabel:"Text to rewrite", inputPlaceholder:"Paste the text you want rewritten…",
+      params:[{id:"tone", label:"Target tone", type:"select", options:["Formal","Casual","Persuasive","Simple / Plain English","Academic","Enthusiastic","Empathetic"], default:"Formal"}],
+      buildPrompt:(input, p) => `Rewrite the following text in a ${p.tone||"Formal"} tone. Keep all key information.\n\nOriginal:\n${input}`,
+    },
+    {
+      id:"sql", icon:"◇", name:"SQL Assistant", category:"Code",
+      desc:"Writes SQL queries from plain English descriptions. Supports most SQL dialects.",
+      systemPrompt:"You are a SQL expert. Write clean, efficient, well-commented SQL queries. Explain what the query does after writing it.",
+      inputLabel:"Describe what you want to query in plain English", inputPlaceholder:"e.g. Get the top 10 customers by total order value in 2024, including their name and email address…",
+      params:[{id:"dialect", label:"SQL dialect", type:"select", options:["PostgreSQL","MySQL","SQLite","SQL Server","BigQuery","Snowflake"], default:"PostgreSQL"}],
+      buildPrompt:(input, p) => `Write a ${p.dialect||"PostgreSQL"} query for the following requirement:\n\n${input}\n\nProvide the query and a brief explanation.`,
+    },
+    {
+      id:"sentiment", icon:"◆", name:"Sentiment Analyzer", category:"Analysis",
+      desc:"Analyzes sentiment in text — reviews, feedback, social posts. Returns structured results.",
+      systemPrompt:"You are a sentiment analysis expert. Analyze text for overall sentiment, emotional tone, and key themes. Be specific with evidence from the text.",
+      inputLabel:"Paste text to analyze", inputPlaceholder:"Paste customer reviews, feedback, or any text…",
+      params:[{id:"depth", label:"Analysis depth", type:"select", options:["Quick (overall only)","Standard (sentiment + themes)","Deep (full breakdown)"], default:"Standard (sentiment + themes)"}],
+      buildPrompt:(input, p) => `Perform ${p.depth||"Standard"} sentiment analysis on the following text. Include: overall sentiment score, emotional tone, key themes, and notable phrases.\n\nText:\n${input}`,
+    },
+    {
+      id:"regex", icon:"◊", name:"Regex Generator", category:"Code",
+      desc:"Generates regex patterns from plain English descriptions. Explains each part.",
+      systemPrompt:"You are a regex expert. Generate accurate regex patterns and explain every component. Test with examples.",
+      inputLabel:"Describe what you need to match", inputPlaceholder:"e.g. Match all valid email addresses…\nor: Extract dates in DD/MM/YYYY format from text…",
+      params:[{id:"flavor", label:"Regex flavor", type:"select", options:["JavaScript","Python","Java","PHP","Go","Ruby"], default:"JavaScript"}],
+      buildPrompt:(input, p) => `Write a ${p.flavor||"JavaScript"} regex pattern for: ${input}\n\nProvide: the pattern, explanation of each component, and 3 example matches.`,
+    },
+  ];
+
+  const categories = [...new Set(SKILLS.map(s => s.category))];
+
+  const runSkill = async () => {
+    if (!input.trim() || !hasKey || !activeSkill) return;
+    const skill = SKILLS.find(s => s.id === activeSkill);
+    if (!skill) return;
+    setLoading(true); setOutput("");
+    const prompt = skill.buildPrompt(input, customParams);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+        body: JSON.stringify({
+          model, max_tokens:1024,
+          system: skill.systemPrompt,
+          messages:[{role:"user", content:prompt}]
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || "API error");
+      const result = d.content[0].text;
+      setOutput(result);
+      addLog("claude_sonnet", prompt.slice(0,60), true, Math.floor(result.length/4));
+      toastFn?.("Done!");
+    } catch(e) {
+      setOutput(`Error: ${e.message}`);
+      toastFn?.(e.message, "err");
+    }
+    setLoading(false);
   };
 
+  const skill = SKILLS.find(s => s.id === activeSkill);
+
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:500,
-      display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
-      onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div style={{background:"#120e08",border:"1px solid #2a1f0e",borderRadius:14,width:"100%",maxWidth:480,padding:28}}>
-        <div style={{...S.flex(12,"center","space-between"),marginBottom:20}}>
-          <div style={{fontFamily:"Georgia,serif",fontWeight:700,fontSize:18,color:"#f4e4c4"}}>
-            Add API Key — {m.name}
-          </div>
-          <button style={{background:"none",border:"none",color:"#6b5c42",cursor:"pointer",fontSize:20}} onClick={onClose}>✕</button>
+    <div style={main} className="fade">
+      <div style={{marginBottom:22}}>
+        <div style={{fontWeight:700, fontSize:22, color:C.text, marginBottom:4}}>Claude Skills</div>
+        <div style={{color:C.muted, fontSize:13}}>
+          Ready-to-use prompting templates powered by real Claude API calls — pick a skill, fill in your input, run it.
+        </div>
+      </div>
+
+      {!hasKey && (
+        <div style={{background:"rgba(249,115,22,0.06)", border:"1px solid rgba(249,115,22,0.25)", borderRadius:9, padding:"13px 16px", marginBottom:20, fontSize:13, color:C.orange}}>
+          ⚠ Add an Anthropic API key in Dashboard to use these skills. All 3 Claude models (Opus, Sonnet, Haiku) use the same <strong>ANTHROPIC_API_KEY</strong>.
+        </div>
+      )}
+
+      <div style={{display:"grid", gridTemplateColumns:"260px 1fr", gap:18, alignItems:"start"}}>
+        {/* Skill list */}
+        <div>
+          <div style={{fontSize:11, color:C.muted, letterSpacing:"0.05em", marginBottom:10}}>MODEL</div>
+          <select value={model} onChange={e=>setModel(e.target.value)}
+            style={{...inp, marginBottom:18, fontSize:12.5}}>
+            {CLAUDE_MODELS.map(m=>(
+              <option key={m.id} value={m.id}>{m.label} · {m.cost}</option>
+            ))}
+          </select>
+
+          {categories.map(cat => (
+            <div key={cat} style={{marginBottom:16}}>
+              <div style={{fontSize:10.5, color:C.muted, letterSpacing:"0.06em", marginBottom:6, paddingLeft:2}}>{cat.toUpperCase()}</div>
+              {SKILLS.filter(s=>s.category===cat).map(s=>(
+                <div key={s.id} style={{...card, padding:"10px 12px", marginBottom:5, cursor:"pointer",
+                  borderColor:activeSkill===s.id?C.orange:C.border,
+                  background:activeSkill===s.id?C.orangeDim:C.surface}}
+                  onClick={()=>{setActiveSkill(s.id);setInput("");setOutput("");setCustomParams({});}}>
+                  <div style={fl(7)}>
+                    <span style={{color:C.orange, fontSize:15}}>{s.icon}</span>
+                    <div>
+                      <div style={{fontWeight:600, fontSize:12.5, color:C.text}}>{s.name}</div>
+                      <div style={{fontSize:10.5, color:C.muted, lineHeight:1.4, marginTop:1}}>{s.desc.split(".")[0]}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
-        <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.2)",
-          borderRadius:8,padding:"10px 14px",fontSize:12,color:"#8a7a62",lineHeight:1.6,marginBottom:16}}>
-          🔐 Key is stored in <strong style={{color:"#f97316"}}>localStorage</strong> only — never sent to any server.
-        </div>
+        {/* Skill runner */}
+        <div>
+          {!activeSkill ? (
+            <div style={{...card, padding:48, textAlign:"center"}}>
+              <div style={{fontSize:28, marginBottom:12, color:C.faint}}>◈</div>
+              <div style={{color:C.muted, fontSize:14}}>Select a skill from the left to get started.</div>
+              <div style={{color:C.faint, fontSize:12, marginTop:6}}>{SKILLS.length} skills available — no prompt engineering needed.</div>
+            </div>
+          ) : (
+            <div>
+              <div style={{...card, padding:"16px 18px", marginBottom:14}}>
+                <div style={fl(10,"flex-start","space-between")}>
+                  <div style={fl(10)}>
+                    <span style={{fontSize:22, color:C.orange}}>{skill.icon}</span>
+                    <div>
+                      <div style={{fontWeight:700, fontSize:16, color:C.text}}>{skill.name}</div>
+                      <div style={{fontSize:12.5, color:C.muted, marginTop:2}}>{skill.desc}</div>
+                    </div>
+                  </div>
+                  <span style={{fontSize:11, color:C.muted, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:5, padding:"2px 8px"}}>{skill.category}</span>
+                </div>
 
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"#6b5c42",marginBottom:6}}>Environment variable: <span style={{color:"#f97316"}}>{m.envKey}</span></div>
-          <input type="password" value={val} onChange={e=>setVal(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&save()}
-            placeholder={`sk-... or your ${m.envKey}`}
-            style={S.input} />
+                {/* System prompt preview */}
+                <div style={{marginTop:12, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:7, padding:"9px 12px"}}>
+                  <div style={{fontSize:10, color:C.muted, letterSpacing:"0.05em", marginBottom:4}}>SYSTEM PROMPT (read-only)</div>
+                  <div style={{fontSize:11.5, color:"#7c9af4", lineHeight:1.6, fontFamily:"ui-monospace,monospace"}}>{skill.systemPrompt}</div>
+                </div>
+              </div>
+
+              {/* Params */}
+              {skill.params.length > 0 && (
+                <div style={{...card, padding:"14px 16px", marginBottom:12}}>
+                  <div style={{fontSize:11, color:C.muted, letterSpacing:"0.05em", marginBottom:10}}>OPTIONS</div>
+                  <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10}}>
+                    {skill.params.map(p => (
+                      <div key={p.id}>
+                        <div style={{fontSize:11.5, color:C.muted, marginBottom:5}}>{p.label}</div>
+                        {p.type==="select" ? (
+                          <select value={customParams[p.id]||p.default} onChange={e=>setCustomParams(prev=>({...prev,[p.id]:e.target.value}))}
+                            style={{...inp, fontSize:12.5}}>
+                            {p.options.map(o=><option key={o} value={o}>{o}</option>)}
+                          </select>
+                        ) : (
+                          <input type="text" placeholder={p.placeholder} value={customParams[p.id]||""}
+                            onChange={e=>setCustomParams(prev=>({...prev,[p.id]:e.target.value}))}
+                            style={{...inp, fontSize:12.5}}/>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Input */}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:11.5, color:C.muted, marginBottom:6}}>{skill.inputLabel}</div>
+                <textarea value={input} onChange={e=>setInput(e.target.value)}
+                  placeholder={skill.inputPlaceholder}
+                  style={{...inp, height:160, resize:"vertical", lineHeight:1.7}}/>
+              </div>
+
+              <button style={{...btn("fill"), fontSize:13.5, padding:"10px 24px",
+                opacity:hasKey&&input.trim()?1:0.4}}
+                onClick={runSkill} disabled={!hasKey||!input.trim()||loading} className="hov">
+                {loading ? "Running…" : `▶ Run with ${CLAUDE_MODELS.find(m=>m.id===model)?.label.split(" —")[0]}`}
+              </button>
+
+              {/* Output */}
+              {output && (
+                <div style={{...card, marginTop:14, padding:"15px 17px"}}>
+                  <div style={{...fl(0,"center","space-between"), marginBottom:10}}>
+                    <div style={{fontSize:11, color:C.muted, letterSpacing:"0.05em"}}>OUTPUT</div>
+                    <button style={{...btn("line"), fontSize:11}} onClick={()=>{navigator.clipboard.writeText(output).catch(()=>{});toastFn?.("Copied!");}} className="hov">Copy</button>
+                  </div>
+                  <div style={{fontSize:13.5, color:C.text, lineHeight:1.75, whiteSpace:"pre-wrap",
+                    fontFamily: output.includes("```") ? "ui-monospace,monospace" : "inherit",
+                    maxHeight:480, overflow:"auto"}}>
+                    {output}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-        <div style={{fontSize:11,color:"#6b5c42",marginBottom:16}}>
-          Get your key at: <a href={m.docsUrl} target="_blank" rel="noreferrer"
-            style={{color:"#f97316"}}>{m.docsUrl} ↗</a>
+      </div>
+    </div>
+  );
+}
+
+
+  const [prompt,setPrompt]=useState("Hello! Introduce yourself in one sentence.");
+  const [resp,setResp]=useState("");const [loading,setLoading]=useState(false);
+  const has=!!apiKeys[m.id];
+  const run=async()=>{if(!prompt.trim()||loading||!has)return;setLoading(true);setResp("");try{const r=await m.callFn(apiKeys[m.id],prompt);setResp(r);addLog(m.id,prompt,true,Math.floor(r.length/4));toastFn?.("Got a response");}catch(e){setResp(`Error: ${e.message}`);addLog(m.id,prompt,false,0);toastFn?.(e.message,"err");}setLoading(false);};
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{...card,width:"100%",maxWidth:570,maxHeight:"82vh",overflow:"auto",padding:24}}>
+        <div style={{...fl(0,"center","space-between"),marginBottom:16}}><div style={fl(8)}><span style={{color:C.orange,fontSize:19}}>{m.icon}</span><div><div style={{fontWeight:700,fontSize:15,color:C.text}}>Test {m.name}</div><div style={{fontSize:11.5,color:C.muted}}>{m.org} · {m.context}</div></div></div><button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:17}} onClick={onClose}>✕</button></div>
+        {!has?(<div style={{textAlign:"center",padding:26}}><div style={{color:C.orange,fontSize:13,marginBottom:13}}>No API key for this model.</div><button style={btn("fill")} onClick={onKey} className="hov">+ Add key</button></div>):(
+          <>
+            <div style={{marginBottom:9}}><div style={{fontSize:11,color:C.muted,marginBottom:4}}>PROMPT</div><textarea value={prompt} onChange={e=>setPrompt(e.target.value)} style={{...inp,height:68,resize:"vertical"}}/></div>
+            <button style={{...btn("fill"),width:"100%",justifyContent:"center",marginBottom:12}} onClick={run} disabled={loading} className="hov">{loading?"Generating…":"▶ Run"}</button>
+            {resp&&<div style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,padding:13,fontSize:13,color:C.text,lineHeight:1.7,whiteSpace:"pre-wrap",maxHeight:240,overflow:"auto",marginBottom:12}}><div style={{fontSize:10.5,color:C.muted,marginBottom:5}}>RESPONSE</div>{resp}</div>}
+          </>
+        )}
+        <div style={{background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,padding:11}}>
+          <div style={{fontSize:10.5,color:C.muted,marginBottom:5}}>QUICK SNIPPET</div>
+          <pre style={{fontSize:11,color:"#7c9af4",overflow:"auto",lineHeight:1.6,whiteSpace:"pre-wrap"}}>{`fetch("${m.endpoint}", {\n  method: "POST",\n  headers: { "Authorization": "Bearer YOUR_KEY" },\n  body: JSON.stringify({\n    model: "${m.model}",\n    messages: [{ role: "user", content: "..." }]\n  })\n})`}</pre>
+          <button style={{...btn("line"),marginTop:7,fontSize:11}} onClick={()=>{navigator.clipboard.writeText(`fetch("${m.endpoint}",{method:"POST",headers:{"Authorization":"Bearer KEY"},body:JSON.stringify({model:"${m.model}",messages:[{role:"user",content:"..."}]})})`).catch(()=>{});toastFn?.("Copied!");}} className="hov">Copy</button>
         </div>
-        <div style={S.flex(8)}>
-          <button style={{...S.btn("primary"),flex:1,justifyContent:"center"}} onClick={save} className="hov-btn">
-            Save & Enable
-          </button>
-          <button style={{...S.btn("ghost")}} onClick={onClose} className="hov-btn">Cancel</button>
-        </div>
+      </div>
+    </div>
+  );
+}
+
+function KeyModal({model:m,apiKeys,setApiKeys,onClose}) {
+  const [val,setVal]=useState(apiKeys[m.id]||"");
+  const save=()=>{if(!val.trim())return;setApiKeys(p=>({...p,[m.id]:val.trim()}));toastFn?.(`Key saved for ${m.name}`);onClose();};
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{...card,width:"100%",maxWidth:450,padding:24}}>
+        <div style={{...fl(0,"center","space-between"),marginBottom:16}}><div style={{fontWeight:700,fontSize:15,color:C.text}}>Add key — {m.name}</div><button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:17}} onClick={onClose}>✕</button></div>
+        <div style={{background:"rgba(249,115,22,0.05)",border:"1px solid rgba(249,115,22,0.18)",borderRadius:7,padding:"8px 12px",fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.7}}>🔐 Stored in localStorage only — never leaves your browser.</div>
+        <div style={{marginBottom:11}}><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Env key: <span style={{color:C.orangeL}}>{m.envKey}</span></div><input type="password" value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&save()} placeholder={`sk-… or your ${m.envKey}`} style={inp}/></div>
+        <div style={{fontSize:11.5,color:C.muted,marginBottom:14}}>Get your key at: <a href={m.docsUrl} target="_blank" rel="noreferrer" style={{color:C.orange}}>{m.docsUrl} ↗</a></div>
+        <div style={fl(7)}><button style={{...btn("fill"),flex:1,justifyContent:"center"}} onClick={save} className="hov">Save key</button><button style={btn("line")} onClick={onClose} className="hov">Cancel</button></div>
       </div>
     </div>
   );
