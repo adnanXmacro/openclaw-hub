@@ -1316,6 +1316,7 @@ function ClaudeSkillsPage({apiKeys, addLog}) {
 }
 
 
+function TestModal({model:m,apiKeys,addLog,onClose,onKey}) {
   const [prompt,setPrompt]=useState("Hello! Introduce yourself in one sentence.");
   const [resp,setResp]=useState("");const [loading,setLoading]=useState(false);
   const has=!!apiKeys[m.id];
